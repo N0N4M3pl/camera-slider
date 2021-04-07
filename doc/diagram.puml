@@ -1,0 +1,49 @@
+@startuml Diagram
+
+' 1 = Nothing --> NAV_NULL
+' 2 = Previous --> NAV_DEC
+' 3 = Nothing --> NAV_NULL
+' 4 = Previous --> NAV_DEC
+' 5 = Nothing --> NAV_NULL
+' 6 = Next --> NAV_INC
+' 7 = Nothing --> NAV_NULL
+' 8 = Next --> NAV_INC
+' 9 = Nothing --> NAV_NULL
+' 0 = Nothing --> NAV_NULL
+' START = Enter --> NAV_SEL
+' STOP = Exit --> NAV_ESC
+
+(*) --> [Code] "Calibration" 
+"Calibration" ----> [Code] "Menu"
+
+"Menu" ----> [Key\n Enter] "Calibration"
+"Menu" ----> [Key\n Enter] "Configuration"
+"Menu" ----> [Key\n Enter] "Start"
+
+"Configuration" ---> [Key\n Exit] "Menu"
+"Configuration" ---> [Key\n Enter] "Mode"
+"Configuration" ---> [Key\n Enter] "Duration"
+"Configuration" ---> [Key\n Enter] "Number of runs"
+"Configuration" ---> [Key\n Enter] "Distance"
+"Configuration" ---> [Key\n Enter] "Begin angle"
+"Configuration" ---> [Key\n Enter] "End angle"
+
+"Mode" --> [Key\n Next] "Mode show next"
+"Mode" --> [Key\n Previous] "Mode show previous"
+"Mode" --> [Key\n Enter] "Mode accept"
+"Mode" --> [Key\n Exit] "Mode cancel"
+"Mode accept" --> "Configuration"
+"Mode cancel" --> "Configuration"
+
+"Duration" --> [Key\n 123] "Duration show value"
+"Duration" --> [Key\n Enter] "Duration accept"
+"Duration" --> [Key\n Exit] "Duration cancel"
+"Duration accept" --> "Configuration"
+"Duration cancel" --> "Configuration"
+
+"Start" --> [Code\n Limit reached] "Stop"
+"Start" --> [Key\n Exit] "Stop"
+"Stop" ----> "Menu"
+
+
+@enduml
