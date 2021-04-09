@@ -16,7 +16,8 @@ void setup() {
   Serial.println("start");
 
   lcd.begin();
-  lcd.setBacklight(BACKLIGHT);
+//  lcd.setBacklight(BACKLIGHT);
+  lcd.backlight();
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(" camera-slider  ");

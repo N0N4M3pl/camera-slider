@@ -9,7 +9,6 @@
 //---------------------------------------------------
 
 #define PIN_SWITCH 13
-#define PIN_LCD_ADDRESS 0x27
 #define PIN_MOTOR_MOVE_DIR 10
 #define PIN_MOTOR_MOVE_STEP 9
 #define PIN_MOTOR_MOVE_M0 A2
@@ -20,6 +19,7 @@
 #define PIN_MOTOR_ROTATE_M0 A7
 #define PIN_MOTOR_ROTATE_M1 A6
 #define PIN_MOTOR_ROTATE_M2 A3
+#define LCD_ADDRESS 0x27
 
 //---------------------------------------------------
 // KEYPAD
@@ -31,19 +31,18 @@
 const byte KEYPAD_ROWS PROGMEM = 4; //four rows
 const byte KEYPAD_COLS PROGMEM = 3; //three columns
 const char keypadKeys[KEYPAD_ROWS][KEYPAD_COLS] PROGMEM = {
-  {'1', '2', '3'},
-  {'4', '5', '6'},
-  {'7', '8', '9'},
-  {'#', '0', '*'}
-};
+    {'1', '2', '3'},
+    {'4', '5', '6'},
+    {'7', '8', '9'},
+    {'V', '0', 'X'}};
 const byte keypadRowPins[KEYPAD_ROWS] PROGMEM = {2, 3, 4, 5}; //connect to the row pinouts of the keypad
-const byte keypadColPins[KEYPAD_COLS] PROGMEM = {6, 7, 8}; //connect to the column pinouts of the keypad
+const byte keypadColPins[KEYPAD_COLS] PROGMEM = {6, 7, 8};    //connect to the column pinouts of the keypad
 
 // https://majicdesigns.github.io/MD_UISwitch/class_m_d___u_i_switch___matrix.html
 //MD_UISwitch_Matrix keypad(4, 4, KeypadRowPins, KeypadColPins, KeypadKeyTable);
 
 // https://playground.arduino.cc/Code/Keypad/#Example
-Keypad keypad = Keypad(makeKeymap(keypadKeys), keypadRowPins, keypadColPins, KEYPAD_ROWS, KEYPAD_COLS );
+Keypad keypad = Keypad(makeKeymap(keypadKeys), keypadRowPins, keypadColPins, KEYPAD_ROWS, KEYPAD_COLS);
 
 //---------------------------------------------------
 // SWITCH
@@ -54,7 +53,7 @@ Keypad keypad = Keypad(makeKeymap(keypadKeys), keypadRowPins, keypadColPins, KEY
 //---------------------------------------------------
 
 // https://github.com/blackhack/LCD_I2C/blob/master/src/LCD_I2C.cpp
-LCD_I2C lcd(PIN_LCD_ADDRESS);
+LCD_I2C lcd(LCD_ADDRESS);
 
 //---------------------------------------------------
 // MOTOR
@@ -87,36 +86,47 @@ DRV8825 motorRotate(MOTOR_STEPS, PIN_MOTOR_ROTATE_DIR, PIN_MOTOR_ROTATE_STEP, PI
 // MENU
 //---------------------------------------------------
 
-const char str_Calibrate[] PROGMEM = "Calibrate";
-const char str_DurationTime[] PROGMEM = "Duration time";
-const char str_BounceMode[] PROGMEM = "Bounce mode";
-const char str_Smoothing[] PROGMEM = "Smoothing";
-const char str_Start[] PROGMEM = "START";
-const char str_Calibrating[] PROGMEM = "Calibrating";
-const char str_Working[] PROGMEM = "Working";
+const char menu_Main[] = "Main";
+const char menu_Calibrate[] = "Calibrate";
+const char menu_DurationTime[] = "Duration time";
+const char menu_BounceMode[] = "Bounce mode";
+const char menu_Smoothing[] = "Smoothing";
+const char menu_Start[] = "START";
+const char menu_Calibrating[] = "Calibrating";
+const char menu_Working[] = "Working";
 
-const char *menuMain[] = {str_Calibrate, str_DurationTime, str_BounceMode, str_Smoothing, str_Start };
+const int menuListSize_Main = 5;
+const char *menuList_Main[menuListSize_Main] = {menu_Calibrate, menu_DurationTime, menu_BounceMode, menu_Smoothing, menu_Start};
 
 //---------------------------------------------------
 // MAIN
 //---------------------------------------------------
 
-enum MainState { WORK,
-                 WORK_OPERATING,
-                 CALIBRATE,
-                 CALIBRATE_OPERATING,
-                 CONFIGURATION,
-                 CONFIGURATION_MAIN,
-                 CONFIGURATION_SET_DURATION,
-                 CONFIGURATION_SET_BOUNCE_MODE,
-                 CONFIGURATION_SET_SMOOTHING,
-                 CONFIGURATION_SUMMARY
-               };
+enum MainState
+{
+  WORK,
+  WORK_OPERATING,
+  CALIBRATE,
+  CALIBRATE_OPERATING,
+  CONFIGURATION,
+  CONFIGURATION_DURATION,
+  CONFIGURATION_BOUNCE_MODE,
+  CONFIGURATION_SMOOTHING,
+  CONFIGURATION_SUMMARY,
+  CONFIGURATION_SET_LIST,
+  CONFIGURATION_SET_INT
+};
 
-enum Smoothing { DISABLED, SMALL, NORMAL, LARGE };
+enum Smoothing
+{
+  DISABLED,
+  SMALL,
+  NORMAL,
+  LARGE
+};
 
 // main
-MainState mainState = CALIBRATE;
+MainState mainState = CONFIGURATION;
 
 long duration = 15;
 bool bounceMode = true;
@@ -124,51 +134,66 @@ Smoothing smoothing = DISABLED;
 
 bool directionIsForward = true;
 
+int configurationListIndex = 0;
+char *configurationHeader;
+int *configurationListSize;
+char **configurationList;
+// int *pConfigurationListIndex;
+
 //---------------------------------------------------
 // MAIN: SETUP
 //---------------------------------------------------
 
-void setup() {
-  //  Serial.begin(9600);
-  //  while (!Serial) ; // wait for serial port to connect. Needed for native USB
+void setup()
+{
+   Serial.begin(9600);
+   while (!Serial) ; // wait for serial port to connect. Needed for native USB
 
   // DRV8825 automatically setup pinModes at begin
   pinMode(PIN_SWITCH, INPUT);
 
-  motorMove.begin(120, 1);
+  lcd.begin();
+  lcd.backlight();
+
+  // motorMove.begin(120, 1);
+
+  // pConfigurationListIndex = &configurationListIndex;
 }
 
 //---------------------------------------------------
 // MAIN: LOOP
 //---------------------------------------------------
 
-void loop() {
-  switch (mainState) {
-    case WORK:
-      work();
-      break;
-    case WORK_OPERATING:
-      workOperating();
-      break;
-    case CALIBRATE:
-      calibrate();
-      break;
-    case CALIBRATE_OPERATING:
-      calibrateOperating();
-      break;
-    case CONFIGURATION:
-      break;
-    case CONFIGURATION_MAIN:
-      break;
-    case CONFIGURATION_SET_DURATION:
-      break;
-    case CONFIGURATION_SET_BOUNCE_MODE:
-      break;
-    case CONFIGURATION_SET_SMOOTHING:
-      break;
-    case CONFIGURATION_SUMMARY:
-      break;
-
+void loop()
+{
+  switch (mainState)
+  {
+  case WORK:
+    work();
+    break;
+  case WORK_OPERATING:
+    workOperating();
+    break;
+  case CALIBRATE:
+    calibrate();
+    break;
+  case CALIBRATE_OPERATING:
+    calibrateOperating();
+    break;
+  case CONFIGURATION:
+    configuration();
+    break;
+  case CONFIGURATION_DURATION:
+    break;
+  case CONFIGURATION_BOUNCE_MODE:
+    break;
+  case CONFIGURATION_SMOOTHING:
+    break;
+  case CONFIGURATION_SUMMARY:
+    break;
+  case CONFIGURATION_SET_LIST:
+    configurationSetList(configurationHeader, *configurationListSize, configurationList, &configurationListIndex);
+    break;
   }
 }
 
@@ -176,22 +201,28 @@ void loop() {
 // MAIN: STATE: WORK
 //---------------------------------------------------
 
-void work() {
+void work()
+{
   directionIsForward = true;
   motorMoveSetup(MOTOR_RPM_MAX, 1, motorMove.CONSTANT_SPEED, 0, 0);
   motorMoveStart(MOTOR_MOVE_ANGLE_MAX, duration);
   mainState = WORK_OPERATING;
 }
 
-void workOperating() {
-  lcdPrint(str_Working, str_Working);
+void workOperating()
+{
+  lcdPrint(menu_Working, menu_Working);
 
   long waitTime = motorMove.nextAction();
-  if (!waitTime) {
-    if (bounceMode) {
+  if (!waitTime)
+  {
+    if (bounceMode)
+    {
       directionIsForward = !directionIsForward;
       motorMoveStart(MOTOR_MOVE_ANGLE_MAX, duration);
-    } else {
+    }
+    else
+    {
       motorMove.stop();
       mainState = CONFIGURATION;
     }
@@ -202,24 +233,30 @@ void workOperating() {
 // MAIN: STATE: CALIBRATE
 //---------------------------------------------------
 
-void calibrate() {
+void calibrate()
+{
   directionIsForward = false;
   motorMoveSetup(MOTOR_RPM_MAX, 1, motorMove.CONSTANT_SPEED, 0, 0);
   motorMoveStart(MOTOR_MOVE_ANGLE_MAX, 10);
   mainState = CALIBRATE_OPERATING;
 }
 
-void calibrateOperating() {
-  lcdPrint(str_Calibrating, str_Calibrating);
+void calibrateOperating()
+{
+  lcdPrint(menu_Calibrating, menu_Calibrating);
 
   long waitTime = motorMove.nextAction();
-  if (waitTime) {
+  if (waitTime)
+  {
     bool switchValue = digitalRead(PIN_SWITCH);
-    if (switchValue == HIGH) {
+    if (switchValue == HIGH)
+    {
       motorMove.stop();
       mainState = CONFIGURATION;
     }
-  } else {
+  }
+  else
+  {
     motorMove.startRotate(360);
   }
 }
@@ -228,53 +265,106 @@ void calibrateOperating() {
 // MAIN: STATE: CONFIGURATION
 //---------------------------------------------------
 
-void configuration() {
-
+void configuration()
+{
+  configurationHeader = menu_Main;
+  configurationListSize = &menuListSize_Main;
+  configurationList = menuList_Main;
+  configurationListIndex = 0;
+  mainState = CONFIGURATION_SET_LIST;
 }
 
-void configurationMain() {
-
+void configurationDuration()
+{
 }
 
-void configurationSetDuration() {
-
+void configurationBounceMode()
+{
 }
 
-void configurationSetBounceMode() {
-
+void configurationSmoothing()
+{
 }
 
-void configurationSetSmoothing() {
-
+void configurationSummary()
+{
 }
 
-void configurationSummary() {
+//---------------------------------------------------
 
+void configurationSetList(char *header, int listSize, char **list, int *currentIndex)
+{
+  if (*currentIndex >= listSize)
+  {
+    *currentIndex = 0;
+  }
+
+  // Serial.print("*header=");
+  // Serial.print(*header);
+  // Serial.print(", listSize=");
+  // Serial.print(listSize);
+  // Serial.print(", *list=");
+  // Serial.print(*list);
+  // Serial.print(", *currentIndex=");
+  // Serial.print(*currentIndex);
+  // Serial.print(", list[*currentIndex]=");
+  // Serial.println(list[*currentIndex]);
+
+  char *currentItem = list[*currentIndex];
+  lcdPrint(header, currentItem);
+
+  char key = keypad.getKey();
+  Serial.print("key=");
+  Serial.println(key);
+  switch (key)
+  {
+  case 'V': // enter
+    break;
+  case 'X': // cancel
+    break;
+  case '2': // prev
+  case '4': 
+    (*currentIndex)--;
+    break;
+  case '6': // next
+  case '8': 
+    (*currentIndex)++;
+    break;
+  }
+
+  delay(1000);
 }
 
 //---------------------------------------------------
 // MAIN: HELPERS
 //---------------------------------------------------
 
-void lcdPrint(char *lineA, char *lineB) {
-  lcd.setCursor(0, 0);
-  lcd.print(lineA);
-  lcd.setCursor(0, 1);
-  lcd.print(lineB);
-}
-
-void motorMoveSetup(float rpm, short microsteps, BasicStepperDriver::Mode mode, short accel, short decel) {
+void motorMoveSetup(float rpm, short microsteps, BasicStepperDriver::Mode mode, short accel, short decel)
+{
   motorMove.setRPM(rpm);
   motorMove.setMicrostep(microsteps);
   motorMove.setSpeedProfile(mode, accel, decel);
 }
 
-void motorMoveStart(long degrees, long duration) {
-  if (!directionIsForward) {
+void motorMoveStart(long degrees, long duration)
+{
+  if (!directionIsForward)
+  {
     degrees *= -1;
   }
   degrees = motorMove.calcStepsForRotation(degrees);
   motorMove.startMove(degrees, duration);
+}
+
+//---------------------------------------------------
+
+void lcdPrint(char *lineA, char *lineB)
+{
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(lineA);
+  lcd.setCursor(0, 1);
+  lcd.print(lineB);
 }
 
 //---------------------------------------------------
