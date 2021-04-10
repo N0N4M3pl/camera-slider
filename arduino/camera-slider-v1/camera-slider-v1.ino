@@ -28,15 +28,15 @@
 //const uint8_t KeypadRowPins[] PROGMEM = { 2, 3, 4, 5 };     // connected to keypad row pinouts
 //const uint8_t KeypadColPins[] PROGMEM = { 6, 7, 8, 11 };   // connected to the keypad column pinouts
 //const char KeypadKeyTable[16 + 1] PROGMEM = "123A456B789C*0#D"; //define the symbols for the keypad
-const byte KEYPAD_ROWS PROGMEM = 4; //four rows
-const byte KEYPAD_COLS PROGMEM = 3; //three columns
-const char keypadKeys[KEYPAD_ROWS][KEYPAD_COLS] PROGMEM = {
+const byte KEYPAD_ROWS = 4; //four rows
+const byte KEYPAD_COLS = 3; //three columns
+const char keypadKeys[KEYPAD_ROWS][KEYPAD_COLS] = {
     {'1', '2', '3'},
     {'4', '5', '6'},
     {'7', '8', '9'},
     {'V', '0', 'X'}};
-const byte keypadRowPins[KEYPAD_ROWS] PROGMEM = {2, 3, 4, 5}; //connect to the row pinouts of the keypad
-const byte keypadColPins[KEYPAD_COLS] PROGMEM = {6, 7, 8};    //connect to the column pinouts of the keypad
+const byte keypadRowPins[KEYPAD_ROWS] = {2, 3, 4, 5}; //connect to the row pinouts of the keypad
+const byte keypadColPins[KEYPAD_COLS] = {6, 7, 8};    //connect to the column pinouts of the keypad
 
 // https://majicdesigns.github.io/MD_UISwitch/class_m_d___u_i_switch___matrix.html
 //MD_UISwitch_Matrix keypad(4, 4, KeypadRowPins, KeypadColPins, KeypadKeyTable);
@@ -83,20 +83,32 @@ DRV8825 motorMove(MOTOR_STEPS, PIN_MOTOR_MOVE_DIR, PIN_MOTOR_MOVE_STEP, PIN_MOTO
 DRV8825 motorRotate(MOTOR_STEPS, PIN_MOTOR_ROTATE_DIR, PIN_MOTOR_ROTATE_STEP, PIN_MOTOR_ROTATE_M0, PIN_MOTOR_ROTATE_M1, PIN_MOTOR_ROTATE_M2);
 
 //---------------------------------------------------
-// MENU
+// STRINGS
 //---------------------------------------------------
 
-const char menu_Main[] = "Main";
-const char menu_Calibrate[] = "Calibrate";
-const char menu_DurationTime[] = "Duration time";
-const char menu_BounceMode[] = "Bounce mode";
-const char menu_Smoothing[] = "Smoothing";
-const char menu_Start[] = "START";
-const char menu_Calibrating[] = "Calibrating";
-const char menu_Working[] = "Working";
+const char str_Main[] = "Main menu";
+const char str_Calibrate[] = "Calibrate";
+const char str_Duration[] = "Duration";
+const char str_BounceMode[] = "Bounce mode";
+const char str_Smoothing[] = "Smoothing";
+const char str_Start[] = "START";
+const char str_Calibrating[] = "Calibrating";
+const char str_Working[] = "Working";
+const char str_On[] = "On";
+const char str_Off[] = "Off";
+const char str_Short[] = "Short";
+const char str_Medium[] = "Medium";
+const char str_Long[] = "Long";
+const char str_s[] = " s";
 
-const int menuListSize_Main = 5;
-const char *menuList_Main[menuListSize_Main] = {menu_Calibrate, menu_DurationTime, menu_BounceMode, menu_Smoothing, menu_Start};
+const int strListSize_Main = 5;
+const char *strList_Main[strListSize_Main] = {str_Calibrate, str_Duration, str_BounceMode, str_Smoothing, str_Start};
+
+const int strListSize_OnOff = 2;
+const char *strList_OnOff[strListSize_OnOff] = {str_Off, str_On};
+
+const int strListSize_Smoothing = 4;
+const char *strList_Smoothing[strListSize_Smoothing] = {str_Off, str_Short, str_Medium, str_Long};
 
 //---------------------------------------------------
 // MAIN
@@ -105,49 +117,56 @@ const char *menuList_Main[menuListSize_Main] = {menu_Calibrate, menu_DurationTim
 enum MainState
 {
   WORK,
-  WORK_OPERATING,
   CALIBRATE,
-  CALIBRATE_OPERATING,
-  CONFIGURATION,
-  CONFIGURATION_DURATION,
-  CONFIGURATION_BOUNCE_MODE,
-  CONFIGURATION_SMOOTHING,
-  CONFIGURATION_SUMMARY,
-  CONFIGURATION_SET_LIST,
-  CONFIGURATION_SET_INT
+  SETTINGS,
+  SETTINGS_DURATION,
+  SETTINGS_BOUNCE_MODE,
+  SETTINGS_SMOOTHING,
+  SETTINGS_START
+};
+
+enum InputAction
+{
+  NOTHING,
+  ACCEPT,
+  CANCEL
 };
 
 enum Smoothing
 {
-  DISABLED,
-  SMALL,
-  NORMAL,
-  LARGE
+  OFF,
+  SHORT,
+  MEDIUM,
+  LONG
 };
 
-// main
-MainState mainState = CONFIGURATION;
+MainState mainState;
+
+bool directionIsForward = true;
+bool isCalibrated = false;
 
 long duration = 15;
 bool bounceMode = true;
-Smoothing smoothing = DISABLED;
+Smoothing smoothing = OFF;
 
-bool directionIsForward = true;
+char lcdLineA[16];
+char lcdLineB[16];
 
-int configurationListIndex = 0;
-char *configurationHeader;
-int *configurationListSize;
-char **configurationList;
-// int *pConfigurationListIndex;
+int inputMainListIndex = 0;
+int inputTmpListIndex = 0;
+int inputTmpListIndexLast = 0;
+int inputTmpValueInt = 0;
+int inputTmpValueIntLast = 0;
 
 //---------------------------------------------------
-// MAIN: SETUP
+// MAIN
 //---------------------------------------------------
 
 void setup()
 {
-   Serial.begin(9600);
-   while (!Serial) ; // wait for serial port to connect. Needed for native USB
+  Serial.begin(9600);
+  while (!Serial)
+    ; // wait for serial port to connect. Needed for native USB
 
   // DRV8825 automatically setup pinModes at begin
   pinMode(PIN_SWITCH, INPUT);
@@ -155,46 +174,86 @@ void setup()
   lcd.begin();
   lcd.backlight();
 
-  // motorMove.begin(120, 1);
-
-  // pConfigurationListIndex = &configurationListIndex;
+  setState(MainState::SETTINGS);
 }
 
 //---------------------------------------------------
-// MAIN: LOOP
 //---------------------------------------------------
 
 void loop()
 {
   switch (mainState)
   {
-  case WORK:
+  case MainState::WORK:
     work();
     break;
-  case WORK_OPERATING:
-    workOperating();
-    break;
-  case CALIBRATE:
+  case MainState::CALIBRATE:
     calibrate();
     break;
-  case CALIBRATE_OPERATING:
-    calibrateOperating();
+  case MainState::SETTINGS:
+    settings();
     break;
-  case CONFIGURATION:
-    configuration();
+  case MainState::SETTINGS_DURATION:
+    settingsDuration();
     break;
-  case CONFIGURATION_DURATION:
+  case MainState::SETTINGS_BOUNCE_MODE:
+    settingsBounceMode();
     break;
-  case CONFIGURATION_BOUNCE_MODE:
+  case MainState::SETTINGS_SMOOTHING:
+    settingsSmoothing();
     break;
-  case CONFIGURATION_SMOOTHING:
-    break;
-  case CONFIGURATION_SUMMARY:
-    break;
-  case CONFIGURATION_SET_LIST:
-    configurationSetList(configurationHeader, *configurationListSize, configurationList, &configurationListIndex);
+  case MainState::SETTINGS_START:
+    settingsStart();
     break;
   }
+}
+
+//---------------------------------------------------
+// MAIN: SET STATE
+//---------------------------------------------------
+
+void setState(MainState state)
+{
+  Serial.print("setState | mainState=");
+  Serial.print(mainState);
+  Serial.print(", state=");
+  Serial.println(state);
+
+  switch (state)
+  {
+  case MainState::WORK:
+    directionIsForward = true;
+    motorMoveSetup(MOTOR_RPM_MAX, 1, motorMove.CONSTANT_SPEED, 0, 0);
+    motorMoveStart(MOTOR_MOVE_ANGLE_MAX, duration);
+    lcdPrint(str_Working, str_Working);
+    break;
+  case MainState::CALIBRATE:
+    directionIsForward = false;
+    motorMoveSetup(MOTOR_RPM_MAX, 1, motorMove.CONSTANT_SPEED, 0, 0);
+    motorMoveStart(MOTOR_MOVE_ANGLE_MAX, 10);
+    lcdPrint(str_Calibrating, str_Calibrating);
+    break;
+  case MainState::SETTINGS:
+    inputTmpListIndexLast = -1;
+    break;
+  case MainState::SETTINGS_DURATION:
+    inputTmpValueIntLast = -1;
+    inputTmpValueInt = 0;
+    break;
+  case MainState::SETTINGS_BOUNCE_MODE:
+    inputTmpListIndexLast = -1;
+    inputTmpListIndex = bounceMode; // false => 0, true => 1
+    break;
+  case MainState::SETTINGS_SMOOTHING:
+    inputTmpListIndexLast = -1;
+    inputTmpListIndex = smoothing; // OFF => 0, SHORT => 1, MEDIUM => 2, LONG => 3
+    break;
+  case MainState::SETTINGS_START:
+    lcdPrint(str_Start, str_Start);
+    break;
+  }
+
+  mainState = state;
 }
 
 //---------------------------------------------------
@@ -203,16 +262,6 @@ void loop()
 
 void work()
 {
-  directionIsForward = true;
-  motorMoveSetup(MOTOR_RPM_MAX, 1, motorMove.CONSTANT_SPEED, 0, 0);
-  motorMoveStart(MOTOR_MOVE_ANGLE_MAX, duration);
-  mainState = WORK_OPERATING;
-}
-
-void workOperating()
-{
-  lcdPrint(menu_Working, menu_Working);
-
   long waitTime = motorMove.nextAction();
   if (!waitTime)
   {
@@ -224,7 +273,7 @@ void workOperating()
     else
     {
       motorMove.stop();
-      mainState = CONFIGURATION;
+      setState(MainState::SETTINGS);
     }
   }
 }
@@ -235,16 +284,6 @@ void workOperating()
 
 void calibrate()
 {
-  directionIsForward = false;
-  motorMoveSetup(MOTOR_RPM_MAX, 1, motorMove.CONSTANT_SPEED, 0, 0);
-  motorMoveStart(MOTOR_MOVE_ANGLE_MAX, 10);
-  mainState = CALIBRATE_OPERATING;
-}
-
-void calibrateOperating()
-{
-  lcdPrint(menu_Calibrating, menu_Calibrating);
-
   long waitTime = motorMove.nextAction();
   if (waitTime)
   {
@@ -252,7 +291,8 @@ void calibrateOperating()
     if (switchValue == HIGH)
     {
       motorMove.stop();
-      mainState = CONFIGURATION;
+      isCalibrated = true;
+      setState(MainState::SETTINGS);
     }
   }
   else
@@ -262,78 +302,85 @@ void calibrateOperating()
 }
 
 //---------------------------------------------------
-// MAIN: STATE: CONFIGURATION
+// MAIN: STATE: SETTINGS
 //---------------------------------------------------
 
-void configuration()
+void settings()
 {
-  configurationHeader = menu_Main;
-  configurationListSize = &menuListSize_Main;
-  configurationList = menuList_Main;
-  configurationListIndex = 0;
-  mainState = CONFIGURATION_SET_LIST;
+  InputAction inputAction = inputList(str_Main, strListSize_Main, strList_Main, &inputMainListIndex);
+  if (inputAction == InputAction::ACCEPT)
+  {
+    switch (inputMainListIndex)
+    {
+    case 0:
+      setState(MainState::CALIBRATE);
+      break;
+    case 1:
+      setState(MainState::SETTINGS_DURATION);
+      break;
+    case 2:
+      setState(MainState::SETTINGS_BOUNCE_MODE);
+      break;
+    case 3:
+      setState(MainState::SETTINGS_SMOOTHING);
+      break;
+    case 4:
+      setState(MainState::SETTINGS_START);
+      break;
+    }
+  }
 }
 
-void configurationDuration()
+void settingsDuration()
 {
+  InputAction inputAction = inputValueInt(str_Duration, &inputTmpValueInt, duration, str_s);
+  switch (inputAction)
+  {
+  case (InputAction::ACCEPT):
+    duration = inputTmpValueInt;
+    setState(MainState::SETTINGS);
+    break;
+  case (InputAction::CANCEL):
+    setState(MainState::SETTINGS);
+    break;
+  }
 }
 
-void configurationBounceMode()
+void settingsBounceMode()
 {
+  InputAction inputAction = inputList(str_BounceMode, strListSize_OnOff, strList_OnOff, &inputTmpListIndex);
+  switch (inputAction)
+  {
+  case (InputAction::ACCEPT):
+    bounceMode = inputTmpListIndex; // 0 => false, 1 => true
+    setState(MainState::SETTINGS);
+    break;
+  case (InputAction::CANCEL):
+    setState(MainState::SETTINGS);
+    break;
+  }
 }
 
-void configurationSmoothing()
+void settingsSmoothing()
 {
+  InputAction inputAction = inputList(str_Smoothing, strListSize_Smoothing, strList_Smoothing, &inputTmpListIndex);
+  switch (inputAction)
+  {
+  case (InputAction::ACCEPT):
+    smoothing = inputTmpListIndex; // 0 => OFF, 1 => SHORT, 2 => MEDIUM, 3 => LONG
+    setState(MainState::SETTINGS);
+    break;
+  case (InputAction::CANCEL):
+    setState(MainState::SETTINGS);
+    break;
+  }
 }
 
-void configurationSummary()
+void settingsStart()
 {
 }
 
 //---------------------------------------------------
-
-void configurationSetList(char *header, int listSize, char **list, int *currentIndex)
-{
-  if (*currentIndex >= listSize)
-  {
-    *currentIndex = 0;
-  }
-
-  // Serial.print("*header=");
-  // Serial.print(*header);
-  // Serial.print(", listSize=");
-  // Serial.print(listSize);
-  // Serial.print(", *list=");
-  // Serial.print(*list);
-  // Serial.print(", *currentIndex=");
-  // Serial.print(*currentIndex);
-  // Serial.print(", list[*currentIndex]=");
-  // Serial.println(list[*currentIndex]);
-
-  char *currentItem = list[*currentIndex];
-  lcdPrint(header, currentItem);
-
-  char key = keypad.getKey();
-  Serial.print("key=");
-  Serial.println(key);
-  switch (key)
-  {
-  case 'V': // enter
-    break;
-  case 'X': // cancel
-    break;
-  case '2': // prev
-  case '4': 
-    (*currentIndex)--;
-    break;
-  case '6': // next
-  case '8': 
-    (*currentIndex)++;
-    break;
-  }
-
-  delay(1000);
-}
 
 //---------------------------------------------------
 // MAIN: HELPERS
@@ -365,6 +412,117 @@ void lcdPrint(char *lineA, char *lineB)
   lcd.print(lineA);
   lcd.setCursor(0, 1);
   lcd.print(lineB);
+}
+
+void lcdPrintInputListItem(char *header, char *listItem)
+{
+  strcpy(lcdLineA, header);
+  strcat(lcdLineA, ":");
+
+  strcpy(lcdLineB, "> ");
+  strcat(lcdLineB, listItem);
+
+  lcdPrint(lcdLineA, lcdLineB);
+}
+
+void lcdPrintInputValueInt(char *header, int *value, char *suffix)
+{
+  strcpy(lcdLineA, header);
+  strcat(lcdLineA, ":");
+
+  itoa(*value, lcdLineB, 10);
+  strcat(lcdLineB, suffix);
+
+  lcdPrint(lcdLineA, lcdLineB);
+}
+
+//---------------------------------------------------
+
+InputAction inputList(char *header, int listSize, char **list, int *index)
+{
+  if (*index >= listSize)
+  {
+    *index = 0;
+  }
+  else if (*index < 0)
+  {
+    *index = listSize - 1;
+  }
+
+  if (inputTmpListIndexLast != *index)
+  {
+    inputTmpListIndexLast = *index;
+    char *currentItem = list[*index];
+    lcdPrintInputListItem(header, currentItem);
+  }
+
+  char key = keypad.getKey();
+  if (key != NO_KEY)
+  {
+    switch (key)
+    {
+    case '2':
+    case '4':
+      (*index)--; // prev
+      break;
+    case '6':
+    case '8':
+      (*index)++; // next
+      break;
+    case 'V':
+      return InputAction::ACCEPT;
+    case 'X':
+      return InputAction::CANCEL;
+    }
+  }
+
+  return InputAction::NOTHING;
+}
+
+InputAction inputValueInt(char *header, int *value, int defaultValue, char *suffix)
+{
+  if (*value == 0)
+  {
+    if (inputTmpValueIntLast != defaultValue)
+    {
+      inputTmpValueIntLast = defaultValue;
+      lcdPrintInputValueInt(header, &defaultValue, suffix);
+    }
+  }
+  else
+  {
+    if (inputTmpValueIntLast != *value)
+    {
+      inputTmpValueIntLast = *value;
+      lcdPrintInputValueInt(header, value, suffix);
+    }
+  }
+
+  char key = keypad.getKey();
+  if (key != NO_KEY)
+  {
+    switch (key)
+    {
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':
+      *value = ((*value) * 10) + (key - 48);
+      break;
+    case 'V':
+      return InputAction::ACCEPT;
+    case 'X':
+      return InputAction::CANCEL;
+    }
+  }
+
+  return InputAction::NOTHING;
 }
 
 //---------------------------------------------------
