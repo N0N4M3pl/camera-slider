@@ -68,7 +68,7 @@ LCD_I2C lcd(LCD_ADDRESS);
 #define MOTOR_DECEL 1000
 // Microstepping mode. If you hardwired it to save pins, set to the same value here.
 #define MOTOR_MICROSTEPS 16
-#define MOTOR_RPM_MAX 600
+#define MOTOR_RPM_MAX 120
 
 /**
    distance per 1 rotation = 4 cm
@@ -145,7 +145,7 @@ MainState mainState;
 bool directionIsForward = true;
 bool isCalibrated = false;
 
-long duration = 15;
+long duration = 30 * 1000000;
 bool bounceMode = true;
 Smoothing smoothing = OFF;
 
@@ -168,11 +168,14 @@ void setup()
   while (!Serial)
     ; // wait for serial port to connect. Needed for native USB
 
-  // DRV8825 automatically setup pinModes at begin
   pinMode(PIN_SWITCH, INPUT);
+
+  // DRV8825 automatically setup pinModes at begin
+  motorMove.begin(120, 1);
 
   lcd.begin();
   lcd.backlight();
+
 
   setState(MainState::SETTINGS);
 }
@@ -223,13 +226,13 @@ void setState(MainState state)
   {
   case MainState::WORK:
     directionIsForward = true;
-    motorMoveSetup(MOTOR_RPM_MAX, 1, motorMove.CONSTANT_SPEED, 0, 0);
+    motorMoveSetup(MOTOR_RPM_MAX, 1, motorMove.CONSTANT_SPEED, 1000, 1000);
     motorMoveStart(MOTOR_MOVE_ANGLE_MAX, duration);
     lcdPrint(str_Working, str_Working);
     break;
   case MainState::CALIBRATE:
     directionIsForward = false;
-    motorMoveSetup(MOTOR_RPM_MAX, 1, motorMove.CONSTANT_SPEED, 0, 0);
+    motorMoveSetup(MOTOR_RPM_MAX, 1, motorMove.CONSTANT_SPEED, 1000, 1000);
     motorMoveStart(MOTOR_MOVE_ANGLE_MAX, 10);
     lcdPrint(str_Calibrating, str_Calibrating);
     break;
@@ -461,6 +464,10 @@ InputAction inputList(char *header, int listSize, char **list, int *index)
   {
     switch (key)
     {
+    case 'V':
+      return InputAction::ACCEPT;
+    case 'X':
+      return InputAction::CANCEL;
     case '2':
     case '4':
       (*index)--; // prev
@@ -469,10 +476,6 @@ InputAction inputList(char *header, int listSize, char **list, int *index)
     case '8':
       (*index)++; // next
       break;
-    case 'V':
-      return InputAction::ACCEPT;
-    case 'X':
-      return InputAction::CANCEL;
     }
   }
 
@@ -503,22 +506,13 @@ InputAction inputValueInt(char *header, int *value, int defaultValue, char *suff
   {
     switch (key)
     {
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9':
-      *value = ((*value) * 10) + (key - 48);
-      break;
     case 'V':
       return InputAction::ACCEPT;
     case 'X':
       return InputAction::CANCEL;
+    default:
+      *value = ((*value) * 10) + (key - 48);
+      break;
     }
   }
 

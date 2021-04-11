@@ -1,0 +1,215 @@
+rpm = 120;
+microsteps = 1;
+degrees = 360;
+stepper.begin(rpm, microsteps);
+stepper.setSpeedProfile(stepper.LINEAR_SPEED, 1000, 1000);
+degrees = stepper.calcStepsForRotation(degrees);
+duration = 10;
+stepper.startMove(degrees, duration);
+
+21:44:57.598 ->   step=1.00  angle=2.00  dt=18023  rpm=21.26  state=1
+21:44:57.645 ->   step=2.00  angle=3.00  dt=14008  rpm=25.13  state=1
+21:44:57.727 ->   step=3.00  angle=4.00  dt=11834  rpm=28.48  state=1
+21:44:57.774 ->   step=4.00  angle=5.00  dt=10433  rpm=31.48  state=1
+21:44:57.820 ->   step=5.00  angle=6.00  dt=9426  rpm=34.22  state=1
+21:44:57.867 ->   step=6.00  angle=7.00  dt=8668  rpm=36.75  state=1
+21:44:57.914 ->   step=7.00  angle=8.00  dt=8059  rpm=39.12  state=1
+21:44:58.006 ->   step=8.00  angle=9.00  dt=7564  rpm=41.36  state=1
+21:44:58.052 ->   step=9.00  angle=10.00  dt=7150  rpm=43.48  state=1
+21:44:58.099 ->   step=10.00  angle=11.00  dt=6796  rpm=45.50  state=1
+21:44:58.147 ->   step=11.00  angle=12.00  dt=6485  rpm=47.44  state=1
+21:44:58.238 ->   step=12.00  angle=13.00  dt=6224  rpm=49.30  state=1
+21:44:58.285 ->   step=13.00  angle=14.00  dt=5985  rpm=51.09  state=1
+21:44:58.331 ->   step=14.00  angle=15.00  dt=5768  rpm=52.82  state=1
+21:44:58.377 ->   step=15.00  angle=16.00  dt=5580  rpm=54.50  state=1
+21:44:58.470 ->   step=16.00  angle=17.00  dt=5401  rpm=56.13  state=1
+21:44:58.517 ->   step=17.00  angle=18.00  dt=5245  rpm=57.71  state=1
+21:44:58.565 ->   step=18.00  angle=19.00  dt=5094  rpm=59.25  state=1
+21:44:58.610 ->   step=19.00  angle=20.00  dt=4955  rpm=60.75  state=1
+21:44:58.702 ->   step=20.00  angle=21.00  dt=4834  rpm=62.21  state=1
+21:44:58.749 ->   step=21.00  angle=22.00  dt=4718  rpm=63.64  state=1
+21:44:58.796 ->   step=22.00  angle=23.00  dt=4610  rpm=65.05  state=1
+21:44:58.842 ->   step=23.00  angle=24.00  dt=4512  rpm=66.42  state=1
+21:44:58.935 ->   step=24.00  angle=25.00  dt=4417  rpm=67.75  state=1
+21:44:58.982 ->   step=25.00  angle=26.00  dt=4324  rpm=69.08  state=1
+21:44:59.029 ->   step=26.00  angle=27.00  dt=4239  rpm=70.37  state=1
+21:44:59.075 ->   step=27.00  angle=28.00  dt=4155  rpm=71.65  state=1
+21:44:59.168 ->   step=28.00  angle=29.00  dt=4083  rpm=72.90  state=1
+21:44:59.214 ->   step=29.00  angle=30.00  dt=4011  rpm=74.13  state=1
+21:44:59.261 ->   step=30.00  angle=31.00  dt=3943  rpm=75.32  state=1
+21:44:59.307 ->   step=31.00  angle=32.00  dt=3883  rpm=76.51  state=1
+21:44:59.400 ->   step=32.00  angle=33.00  dt=3817  rpm=77.68  state=1
+21:44:59.448 ->   step=33.00  angle=34.00  dt=3758  rpm=78.82  state=1
+21:44:59.493 ->   step=34.00  angle=35.00  dt=3702  rpm=79.96  state=1
+21:44:59.539 ->   step=35.00  angle=36.00  dt=3644  rpm=81.08  state=1
+21:44:59.632 ->   step=36.00  angle=37.00  dt=3596  rpm=82.19  state=1
+21:44:59.680 ->   step=37.00  angle=38.00  dt=3546  rpm=83.29  state=1
+21:44:59.726 ->   step=38.00  angle=39.00  dt=3498  rpm=84.36  state=1
+21:44:59.773 ->   step=39.00  angle=40.00  dt=3452  rpm=85.42  state=1
+21:44:59.865 ->   step=40.00  angle=41.00  dt=3408  rpm=86.46  state=1
+21:44:59.911 ->   step=41.00  angle=42.00  dt=3366  rpm=87.49  state=1
+21:44:59.957 ->   step=42.00  angle=43.00  dt=3325  rpm=88.52  state=1
+21:45:00.004 ->   step=43.00  angle=44.00  dt=3281  rpm=89.53  state=1
+21:45:00.098 ->   step=44.00  angle=45.00  dt=3247  rpm=90.53  state=1
+21:45:00.145 ->   step=45.00  angle=46.00  dt=3210  rpm=91.52  state=1
+21:45:00.191 ->   step=46.00  angle=47.00  dt=3178  rpm=92.48  state=1
+21:45:00.237 ->   step=47.00  angle=48.00  dt=3140  rpm=93.43  state=1
+21:45:00.331 ->   step=48.00  angle=49.00  dt=3107  rpm=94.40  state=1
+21:45:00.376 ->   step=49.00  angle=50.00  dt=3078  rpm=95.36  state=1
+21:45:00.422 ->   step=50.00  angle=51.00  dt=3042  rpm=96.28  state=1
+21:45:00.468 ->   step=51.00  angle=52.00  dt=3008  rpm=97.21  state=1
+21:45:00.561 ->   step=52.00  angle=53.00  dt=2982  rpm=98.14  state=1
+21:45:00.610 ->   step=53.00  angle=54.00  dt=2953  rpm=99.04  state=1
+21:45:00.655 ->   step=54.00  angle=55.00  dt=2925  rpm=99.97  state=1
+21:45:00.701 ->   step=55.00  angle=56.00  dt=2897  rpm=100.87  state=1
+21:45:00.795 ->   step=56.00  angle=57.00  dt=2870  rpm=101.76  state=1
+21:45:00.843 ->   step=57.00  angle=58.00  dt=2844  rpm=102.63  state=1
+21:45:00.888 ->   step=58.00  angle=59.00  dt=2823  rpm=103.48  state=1
+21:45:00.936 ->   step=59.00  angle=60.00  dt=2799  rpm=104.35  state=1
+21:45:01.030 ->   step=60.00  angle=61.00  dt=2767  rpm=105.19  state=1
+21:45:01.077 ->   step=61.00  angle=62.00  dt=2752  rpm=106.04  state=1
+21:45:01.123 ->   step=62.00  angle=63.00  dt=2725  rpm=106.88  state=1
+21:45:01.216 ->   step=63.00  angle=64.00  dt=2703  rpm=107.72  state=1
+21:45:01.262 ->   step=64.00  angle=65.00  dt=2681  rpm=108.54  state=1
+21:45:01.308 ->   step=65.00  angle=66.00  dt=2660  rpm=109.37  state=1
+21:45:01.354 ->   step=66.00  angle=67.00  dt=2639  rpm=110.17  state=1
+21:45:01.448 ->   step=67.00  angle=68.00  dt=2619  rpm=110.99  state=1
+21:45:01.494 ->   step=68.00  angle=69.00  dt=2599  rpm=111.77  state=1
+21:45:01.540 ->   step=69.00  angle=70.00  dt=2576  rpm=112.57  state=1
+21:45:01.586 ->   step=70.00  angle=71.00  dt=2561  rpm=113.38  state=1
+21:45:01.679 ->   step=71.00  angle=72.00  dt=2542  rpm=114.16  state=1
+21:45:01.725 ->   step=72.00  angle=73.00  dt=2524  rpm=114.94  state=1
+21:45:01.771 ->   step=73.00  angle=74.00  dt=2506  rpm=115.70  state=1
+21:45:01.864 ->   step=74.00  angle=75.00  dt=2489  rpm=116.46  state=1
+21:45:01.909 ->   step=75.00  angle=76.00  dt=2472  rpm=117.23  state=1
+21:45:01.955 ->   step=76.00  angle=77.00  dt=2459  rpm=117.97  state=1
+21:45:02.049 ->   step=77.00  angle=78.00  dt=2439  rpm=118.76  state=1
+21:45:02.095 ->   step=78.00  angle=79.00  dt=2418  rpm=119.52  state=1
+21:45:02.142 ->   step=79.00  angle=80.00  dt=2486  rpm=120.00  state=1
+
+
+
+					21:45:02.188 ->   step=80.00  angle=81.00  dt=2476  rpm=120.00  state=2
+					21:45:02.281 ->   step=81.00  angle=82.00  dt=2476  rpm=120.00  state=2
+					21:45:02.327 ->   step=82.00  angle=83.00  dt=2476  rpm=120.00  state=2
+					21:45:02.375 ->   step=83.00  angle=84.00  dt=2476  rpm=120.00  state=2
+					21:45:02.420 ->   step=84.00  angle=85.00  dt=2476  rpm=120.00  state=2
+					21:45:02.509 ->   step=85.00  angle=86.00  dt=2476  rpm=120.00  state=2
+					21:45:02.555 ->   step=86.00  angle=87.00  dt=2476  rpm=120.00  state=2
+					21:45:02.598 ->   step=87.00  angle=88.00  dt=2476  rpm=120.00  state=2
+					21:45:02.689 ->   step=88.00  angle=89.00  dt=2476  rpm=120.00  state=2
+					21:45:02.735 ->   step=89.00  angle=90.00  dt=2476  rpm=120.00  state=2
+					21:45:02.827 ->   step=90.00  angle=91.00  dt=2476  rpm=120.00  state=2
+					21:45:02.827 ->   step=91.00  angle=92.00  dt=2476  rpm=120.00  state=2
+					21:45:02.919 ->   step=92.00  angle=93.00  dt=2476  rpm=120.00  state=2
+					21:45:02.965 ->   step=93.00  angle=94.00  dt=2476  rpm=120.00  state=2
+					21:45:03.058 ->   step=94.00  angle=95.00  dt=2476  rpm=120.00  state=2
+					21:45:03.104 ->   step=95.00  angle=96.00  dt=2476  rpm=120.00  state=2
+					21:45:03.152 ->   step=96.00  angle=97.00  dt=2472  rpm=120.00  state=2
+					21:45:03.199 ->   step=97.00  angle=98.00  dt=2476  rpm=120.00  state=2
+					21:45:03.291 ->   step=98.00  angle=99.00  dt=2476  rpm=120.00  state=2
+					21:45:03.337 ->   step=99.00  angle=100.00  dt=2476  rpm=120.00  state=2
+					21:45:03.383 ->   step=100.00  angle=101.00  dt=2476  rpm=120.00  state=2
+					21:45:03.430 ->   step=101.00  angle=102.00  dt=2476  rpm=120.00  state=2
+					21:45:03.521 ->   step=102.00  angle=103.00  dt=2476  rpm=120.00  state=2
+					21:45:03.567 ->   step=103.00  angle=104.00  dt=2476  rpm=120.00  state=2
+					21:45:03.660 ->   step=104.00  angle=105.00  dt=2476  rpm=120.00  state=2
+					21:45:03.706 ->   step=105.00  angle=106.00  dt=2476  rpm=120.00  state=2
+					21:45:03.752 ->   step=106.00  angle=107.00  dt=2476  rpm=120.00  state=2
+					21:45:03.797 ->   step=107.00  angle=108.00  dt=2480  rpm=120.00  state=2
+					21:45:03.890 ->   step=108.00  angle=109.00  dt=2476  rpm=120.00  state=2
+					21:45:03.937 ->   step=109.00  angle=110.00  dt=2476  rpm=120.00  state=2
+					21:45:03.983 ->   step=110.00  angle=111.00  dt=2476  rpm=120.00  state=2
+					21:45:04.076 ->   step=111.00  angle=112.00  dt=2476  rpm=120.00  state=2
+					21:45:04.123 ->   step=112.00  angle=113.00  dt=2476  rpm=120.00  state=2
+					21:45:04.169 ->   step=113.00  angle=114.00  dt=2476  rpm=120.00  state=2
+					21:45:04.259 ->   step=114.00  angle=115.00  dt=2476  rpm=120.00  state=2
+					21:45:04.305 ->   step=115.00  angle=116.00  dt=2476  rpm=120.00  state=2
+					21:45:04.351 ->   step=116.00  angle=117.00  dt=2476  rpm=120.00  state=2
+					21:45:04.446 ->   step=117.00  angle=118.00  dt=2476  rpm=120.00  state=2
+					21:45:04.493 ->   step=118.00  angle=119.00  dt=2476  rpm=120.00  state=2
+					
+					
+					
+21:45:04.585 ->   step=119.00  angle=120.00  dt=2392  rpm=119.24  state=3
+21:45:04.585 ->   step=120.00  angle=121.00  dt=2412  rpm=118.48  state=3
+21:45:04.678 ->   step=121.00  angle=122.00  dt=2420  rpm=117.74  state=3
+21:45:04.725 ->   step=122.00  angle=123.00  dt=2440  rpm=117.00  state=3
+21:45:04.818 ->   step=123.00  angle=124.00  dt=2456  rpm=116.23  state=3
+21:45:04.862 ->   step=124.00  angle=125.00  dt=2473  rpm=115.43  state=3
+21:45:04.956 ->   step=125.00  angle=126.00  dt=2491  rpm=114.68  state=3
+21:45:04.956 ->   step=126.00  angle=127.00  dt=2508  rpm=113.90  state=3
+21:45:05.049 ->   step=127.00  angle=128.00  dt=2526  rpm=113.12  state=3
+21:45:05.096 ->   step=128.00  angle=129.00  dt=2544  rpm=112.32  state=3
+21:45:05.188 ->   step=129.00  angle=130.00  dt=2567  rpm=111.52  state=3
+21:45:05.234 ->   step=130.00  angle=131.00  dt=2582  rpm=110.70  state=3
+21:45:05.279 ->   step=131.00  angle=132.00  dt=2602  rpm=109.89  state=3
+21:45:05.372 ->   step=132.00  angle=133.00  dt=2626  rpm=109.05  state=3
+21:45:05.419 ->   step=133.00  angle=134.00  dt=2639  rpm=108.23  state=3
+21:45:05.466 ->   step=134.00  angle=135.00  dt=2660  rpm=107.41  state=3
+21:45:05.513 ->   step=135.00  angle=136.00  dt=2689  rpm=106.57  state=3
+21:45:05.607 ->   step=136.00  angle=137.00  dt=2711  rpm=105.71  state=3
+21:45:05.654 ->   step=137.00  angle=138.00  dt=2734  rpm=104.86  state=3
+21:45:05.742 ->   step=138.00  angle=139.00  dt=2753  rpm=103.99  state=3
+21:45:05.788 ->   step=139.00  angle=140.00  dt=2777  rpm=103.13  state=3
+21:45:05.834 ->   step=140.00  angle=141.00  dt=2805  rpm=102.25  state=3
+21:45:05.881 ->   step=141.00  angle=142.00  dt=2826  rpm=101.35  state=3
+21:45:05.974 ->   step=142.00  angle=143.00  dt=2856  rpm=100.47  state=3
+21:45:06.021 ->   step=143.00  angle=144.00  dt=2878  rpm=99.57  state=3
+21:45:06.113 ->   step=144.00  angle=145.00  dt=2909  rpm=98.65  state=3
+21:45:06.113 ->   step=145.00  angle=146.00  dt=2937  rpm=97.75  state=3
+21:45:06.206 ->   step=146.00  angle=147.00  dt=2957  rpm=96.84  state=3
+21:45:06.253 ->   step=147.00  angle=148.00  dt=2994  rpm=95.91  state=3
+21:45:06.345 ->   step=148.00  angle=149.00  dt=3020  rpm=94.97  state=3
+21:45:06.391 ->   step=149.00  angle=150.00  dt=3051  rpm=94.01  state=3
+21:45:06.438 ->   step=150.00  angle=151.00  dt=3083  rpm=93.08  state=3
+21:45:06.485 ->   step=151.00  angle=152.00  dt=3115  rpm=92.14  state=3
+21:45:06.563 ->   step=152.00  angle=153.00  dt=3152  rpm=91.19  state=3
+21:45:06.655 ->   step=153.00  angle=154.00  dt=3182  rpm=90.20  state=3
+21:45:06.694 ->   step=154.00  angle=155.00  dt=3222  rpm=89.21  state=3
+21:45:06.786 ->   step=155.00  angle=156.00  dt=3259  rpm=88.21  state=3
+21:45:06.786 ->   step=156.00  angle=157.00  dt=3289  rpm=87.21  state=3
+21:45:06.880 ->   step=157.00  angle=158.00  dt=3336  rpm=86.18  state=3
+21:45:06.927 ->   step=158.00  angle=159.00  dt=3377  rpm=85.15  state=3
+21:45:07.030 ->   step=159.00  angle=160.00  dt=3419  rpm=84.10  state=3
+21:45:07.063 ->   step=160.00  angle=161.00  dt=3463  rpm=83.03  state=3
+21:45:07.110 ->   step=161.00  angle=162.00  dt=3505  rpm=81.94  state=3
+21:45:07.156 ->   step=162.00  angle=163.00  dt=3553  rpm=80.84  state=3
+21:45:07.249 ->   step=163.00  angle=164.00  dt=3607  rpm=79.72  state=3
+21:45:07.294 ->   step=164.00  angle=165.00  dt=3655  rpm=78.60  state=3
+21:45:07.342 ->   step=165.00  angle=166.00  dt=3709  rpm=77.44  state=3
+21:45:07.390 ->   step=166.00  angle=167.00  dt=3770  rpm=76.26  state=3
+21:45:07.484 ->   step=167.00  angle=168.00  dt=3822  rpm=75.08  state=3
+21:45:07.530 ->   step=168.00  angle=169.00  dt=3888  rpm=73.87  state=3
+21:45:07.577 ->   step=169.00  angle=170.00  dt=3953  rpm=72.64  state=3
+21:45:07.670 ->   step=170.00  angle=171.00  dt=4026  rpm=71.39  state=3
+21:45:07.717 ->   step=171.00  angle=172.00  dt=4098  rpm=70.13  state=3
+21:45:07.763 ->   step=172.00  angle=173.00  dt=4170  rpm=68.84  state=3
+21:45:07.810 ->   step=173.00  angle=174.00  dt=4254  rpm=67.54  state=3
+21:45:07.902 ->   step=174.00  angle=175.00  dt=4334  rpm=66.20  state=3
+21:45:07.948 ->   step=175.00  angle=176.00  dt=4428  rpm=64.82  state=3
+21:45:08.041 ->   step=176.00  angle=177.00  dt=4524  rpm=63.42  state=3
+21:45:08.041 ->   step=177.00  angle=178.00  dt=4622  rpm=62.00  state=3
+21:45:08.134 ->   step=178.00  angle=179.00  dt=4727  rpm=60.53  state=3
+21:45:08.179 ->   step=179.00  angle=180.00  dt=4852  rpm=59.04  state=3
+21:45:08.274 ->   step=180.00  angle=181.00  dt=4973  rpm=57.50  state=3
+21:45:08.320 ->   step=181.00  angle=182.00  dt=5109  rpm=55.93  state=3
+21:45:08.367 ->   step=182.00  angle=183.00  dt=5260  rpm=54.30  state=3
+21:45:08.413 ->   step=183.00  angle=184.00  dt=5421  rpm=52.62  state=3
+21:45:08.506 ->   step=184.00  angle=185.00  dt=5597  rpm=50.90  state=3
+21:45:08.552 ->   step=185.00  angle=186.00  dt=5786  rpm=49.11  state=3
+21:45:08.645 ->   step=186.00  angle=187.00  dt=6001  rpm=47.26  state=3
+21:45:08.691 ->   step=187.00  angle=188.00  dt=6240  rpm=45.32  state=3
+21:45:08.738 ->   step=188.00  angle=189.00  dt=6507  rpm=43.31  state=3
+21:45:08.784 ->   step=189.00  angle=190.00  dt=6819  rpm=41.19  state=3
+21:45:08.878 ->   step=190.00  angle=191.00  dt=7179  rpm=38.97  state=3
+21:45:08.923 ->   step=191.00  angle=192.00  dt=7591  rpm=36.60  state=3
+21:45:09.015 ->   step=192.00  angle=193.00  dt=8088  rpm=34.08  state=3
+21:45:09.015 ->   step=193.00  angle=194.00  dt=8695  rpm=31.35  state=3
+21:45:09.108 ->   step=194.00  angle=195.00  dt=9461  rpm=28.36  state=3
+21:45:09.155 ->   step=195.00  angle=196.00  dt=10469  rpm=25.03  state=3
+21:45:09.247 ->   step=196.00  angle=197.00  dt=11883  rpm=21.18  state=3
+21:45:09.294 ->   step=197.00  angle=198.00  dt=14059  rpm=16.47  state=3
+21:45:09.341 ->   step=198.00  angle=199.00  dt=18107  rpm=9.88  state=3
+21:45:09.387 ->   step=199.00  angle=200.00  dt=30338  rpm=9.88  state=0
+21:45:09.479 -> END
