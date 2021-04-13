@@ -68,15 +68,20 @@ LCD_I2C lcd(LCD_ADDRESS);
 #define MOTOR_DECEL 1000
 // Microstepping mode. If you hardwired it to save pins, set to the same value here.
 #define MOTOR_MICROSTEPS 16
-#define MOTOR_RPM_MAX 120
 
 /**
-   distance per 1 rotation = 4 cm
+   distance in 1 rotation = 4 cm
    max distance = 100 cm
-   max amount of rotations = 100 / 4 = 20 rotations
-   max angle = 20 * 360 = 7200 degree
+   max rotations = 100 / 4 = 20 rotations
+   max degrees = 20 * 360 = 7200 degree
 */
-const int MOTOR_MOVE_ANGLE_MAX PROGMEM = 7200;
+const int MOTOR_MOVE_ROTATIONS_MAX PROGMEM = 20;
+const long MOTOR_MOVE_DEGREES_MAX PROGMEM = MOTOR_MOVE_ROTATIONS_MAX * 360;
+const long MOTOR_MOVE_DEGREES_WORK_MARGIN PROGMEM = 180;
+const long MOTOR_MOVE_DEGREES_WORK_RIDE PROGMEM = MOTOR_MOVE_DEGREES_MAX - (2 * MOTOR_MOVE_DEGREES_WORK_MARGIN);
+const int MOTOR_MOVE_DURATION_MIN PROGMEM = 1;
+const int MOTOR_MOVE_DURATION_MAX PROGMEM = 60 * 60 * 24;
+const int MOTOR_MOVE_RPM_MAX PROGMEM = 600;
 
 // https://github.com/laurb9/StepperDriver/blob/master/src/BasicStepperDriver.cpp
 DRV8825 motorMove(MOTOR_STEPS, PIN_MOTOR_MOVE_DIR, PIN_MOTOR_MOVE_STEP, PIN_MOTOR_MOVE_M0, PIN_MOTOR_MOVE_M1, PIN_MOTOR_MOVE_M2);
@@ -93,13 +98,15 @@ const char str_BounceMode[] = "Bounce mode";
 const char str_Smoothing[] = "Smoothing";
 const char str_Start[] = "START";
 const char str_Calibrating[] = "Calibrating";
+const char str_PleaseWait[] = "Please wait ...";
+const char str_Summary[] = "Summary";
 const char str_Working[] = "Working";
 const char str_On[] = "On";
 const char str_Off[] = "Off";
 const char str_Short[] = "Short";
 const char str_Medium[] = "Medium";
 const char str_Long[] = "Long";
-const char str_s[] = " s";
+const char str_suffix_s[] = " s";
 
 const int strListSize_Main = 5;
 const char *strList_Main[strListSize_Main] = {str_Calibrate, str_Duration, str_BounceMode, str_Smoothing, str_Start};
@@ -116,13 +123,14 @@ const char *strList_Smoothing[strListSize_Smoothing] = {str_Off, str_Short, str_
 
 enum MainState
 {
+  WORK_SUMMARY,
   WORK,
+  WORK_RIDE,
   CALIBRATE,
   SETTINGS,
   SETTINGS_DURATION,
   SETTINGS_BOUNCE_MODE,
-  SETTINGS_SMOOTHING,
-  SETTINGS_START
+  SETTINGS_SMOOTHING
 };
 
 enum InputAction
@@ -142,15 +150,19 @@ enum Smoothing
 
 MainState mainState;
 
-bool directionIsForward = true;
-bool isCalibrated = false;
-
-long duration = 30 * 1000000;
+long duration = 60;
 bool bounceMode = true;
 Smoothing smoothing = OFF;
 
+bool isCalibrated = false;
+bool directionIsForward = true;
+
+short workPercent;
+long motoMoveStepsRemaining;
+
 char lcdLineA[16];
 char lcdLineB[16];
+char lcdValue[16];
 
 int inputMainListIndex = 0;
 int inputTmpListIndex = 0;
@@ -171,11 +183,10 @@ void setup()
   pinMode(PIN_SWITCH, INPUT);
 
   // DRV8825 automatically setup pinModes at begin
-  motorMove.begin(120, 1);
+  motorMove.begin(1, 32);
 
   lcd.begin();
   lcd.backlight();
-
 
   setState(MainState::SETTINGS);
 }
@@ -187,11 +198,17 @@ void loop()
 {
   switch (mainState)
   {
-  case MainState::WORK:
-    work();
+  case MainState::WORK_RIDE:
+    workRide();
     break;
   case MainState::CALIBRATE:
     calibrate();
+    break;
+  case MainState::WORK:
+    work();
+    break;
+  case MainState::WORK_SUMMARY:
+    workSummary();
     break;
   case MainState::SETTINGS:
     settings();
@@ -205,9 +222,6 @@ void loop()
   case MainState::SETTINGS_SMOOTHING:
     settingsSmoothing();
     break;
-  case MainState::SETTINGS_START:
-    settingsStart();
-    break;
   }
 }
 
@@ -217,24 +231,40 @@ void loop()
 
 void setState(MainState state)
 {
-  Serial.print("setState | mainState=");
-  Serial.print(mainState);
-  Serial.print(", state=");
-  Serial.println(state);
+  // Serial.print("setState | mainState=");
+  // Serial.print(mainState);
+  // Serial.print(", state=");
+  // Serial.println(state);
 
   switch (state)
   {
+  case MainState::WORK_SUMMARY:
+    lcdPrintWorkSummary();
+    break;
   case MainState::WORK:
-    directionIsForward = true;
-    motorMoveSetup(MOTOR_RPM_MAX, 1, motorMove.CONSTANT_SPEED, 1000, 1000);
-    motorMoveStart(MOTOR_MOVE_ANGLE_MAX, duration);
-    lcdPrint(str_Working, str_Working);
+    if (isCalibrated)
+    {
+      lcdClear();
+      isCalibrated = false;
+      directionIsForward = true;
+      motorMoveStart(MOTOR_MOVE_DEGREES_WORK_MARGIN, 1, 1000, 1000);
+    }
+    else
+    {
+      setState(MainState::CALIBRATE);
+      return;
+    }
+    break;
+  case MainState::WORK_RIDE:
+    motorMoveStart(MOTOR_MOVE_DEGREES_WORK_RIDE, duration, 1000, 1000);
+    workPercent = -1;
+    motoMoveStepsRemaining = motorMove.getStepsRemaining();
+    lcdPrintWorkRide(workPercent, directionIsForward, motorMove.getCurrentState());
     break;
   case MainState::CALIBRATE:
+    lcdPrint(str_Calibrating, str_PleaseWait);
     directionIsForward = false;
-    motorMoveSetup(MOTOR_RPM_MAX, 1, motorMove.CONSTANT_SPEED, 1000, 1000);
-    motorMoveStart(MOTOR_MOVE_ANGLE_MAX, 10);
-    lcdPrint(str_Calibrating, str_Calibrating);
+    motorMoveStart(MOTOR_MOVE_DEGREES_MAX - 360, 1, 1000, 1000);
     break;
   case MainState::SETTINGS:
     inputTmpListIndexLast = -1;
@@ -251,9 +281,6 @@ void setState(MainState state)
     inputTmpListIndexLast = -1;
     inputTmpListIndex = smoothing; // OFF => 0, SHORT => 1, MEDIUM => 2, LONG => 3
     break;
-  case MainState::SETTINGS_START:
-    lcdPrint(str_Start, str_Start);
-    break;
   }
 
   mainState = state;
@@ -263,22 +290,90 @@ void setState(MainState state)
 // MAIN: STATE: WORK
 //---------------------------------------------------
 
+void workSummary()
+{
+  char key = keypad.getKey();
+  if (key != NO_KEY)
+  {
+    switch (key)
+    {
+    case 'V':
+      setState(MainState::WORK);
+      break;
+    case 'X':
+      setState(MainState::SETTINGS);
+      break;
+    }
+  }
+}
+
 void work()
 {
   long waitTime = motorMove.nextAction();
   if (!waitTime)
   {
-    if (bounceMode)
-    {
-      directionIsForward = !directionIsForward;
-      motorMoveStart(MOTOR_MOVE_ANGLE_MAX, duration);
-    }
-    else
-    {
-      motorMove.stop();
-      setState(MainState::SETTINGS);
-    }
+    delay(1000);
+    setState(MainState::WORK_RIDE);
   }
+}
+
+void workRide()
+{
+  long waitTime = motorMove.nextAction();
+  if (waitTime)
+  {
+    if (!directionIsForward)
+    {
+      bool switchValue = digitalRead(PIN_SWITCH);
+      if (switchValue == HIGH)
+      {
+        workRideEnd();
+        return;
+      }
+    }
+    char key = keypad.getKey();
+    if (key == 'X')
+    {
+      workEnd();
+      return;
+    }
+    // short workPercentNew = workCalculatePercent();
+    // if (workPercentNew != workPercent)
+    // {
+    //   workPercent = workPercentNew;
+    //   lcdPrintWorkRide(workPercent, directionIsForward, motorMove.getCurrentState());
+    // }
+  }
+  else
+  {
+    workRideEnd();
+  }
+}
+
+short workCalculatePercent()
+{
+  return motorMove.getStepsCompleted() * 100 / motoMoveStepsRemaining;
+}
+
+void workRideEnd()
+{
+  if (bounceMode)
+  {
+    directionIsForward = !directionIsForward;
+    motorMoveStart(MOTOR_MOVE_DEGREES_WORK_RIDE, duration, 1000, 1000);
+    workPercent = 0;
+    lcdPrintWorkRide(workPercent, directionIsForward, motorMove.getCurrentState());
+  }
+  else
+  {
+    workEnd();
+  }
+}
+
+void workEnd()
+{
+  motorMoveStop();
+  setState(MainState::SETTINGS);
 }
 
 //---------------------------------------------------
@@ -293,15 +388,26 @@ void calibrate()
     bool switchValue = digitalRead(PIN_SWITCH);
     if (switchValue == HIGH)
     {
-      motorMove.stop();
       isCalibrated = true;
-      setState(MainState::SETTINGS);
+      calibrateEnd();
+      return;
+    }
+    char key = keypad.getKey();
+    if (key == 'X')
+    {
+      calibrateEnd();
     }
   }
   else
   {
-    motorMove.startRotate(360);
+    motorMoveStart(360, 1, 1000, 1000);
   }
+}
+
+void calibrateEnd()
+{
+  motorMoveStop();
+  setState(MainState::SETTINGS);
 }
 
 //---------------------------------------------------
@@ -328,7 +434,7 @@ void settings()
       setState(MainState::SETTINGS_SMOOTHING);
       break;
     case 4:
-      setState(MainState::SETTINGS_START);
+      setState(MainState::WORK_SUMMARY);
       break;
     }
   }
@@ -336,10 +442,11 @@ void settings()
 
 void settingsDuration()
 {
-  InputAction inputAction = inputValueInt(str_Duration, &inputTmpValueInt, duration, str_s);
+  InputAction inputAction = inputValueInt(str_Duration, &inputTmpValueInt, duration, str_suffix_s);
   switch (inputAction)
   {
   case (InputAction::ACCEPT):
+    inputTmpValueInt = min(max(inputTmpValueInt, MOTOR_MOVE_DURATION_MIN), MOTOR_MOVE_DURATION_MAX);
     duration = inputTmpValueInt;
     setState(MainState::SETTINGS);
     break;
@@ -379,34 +486,69 @@ void settingsSmoothing()
   }
 }
 
-void settingsStart()
-{
-}
-
 //---------------------------------------------------
 
 //---------------------------------------------------
 // MAIN: HELPERS
 //---------------------------------------------------
 
-void motorMoveSetup(float rpm, short microsteps, BasicStepperDriver::Mode mode, short accel, short decel)
+void motorMoveStart(long degrees, long duration, short accel, short decel) //, short microsteps)
 {
-  motorMove.setRPM(rpm);
-  motorMove.setMicrostep(microsteps);
-  motorMove.setSpeedProfile(mode, accel, decel);
-}
+  Serial.print("motorMoveStart | input |degrees=");
+  Serial.print(degrees);
+  Serial.print(", duration=");
+  Serial.println(duration);
 
-void motorMoveStart(long degrees, long duration)
-{
-  if (!directionIsForward)
+  degrees = min(degrees, MOTOR_MOVE_DEGREES_MAX);
+  duration = min(max(duration, long(MOTOR_MOVE_DURATION_MIN)), long(MOTOR_MOVE_DURATION_MAX));
+
+  Serial.print("motorMoveStart | min,max | degrees=");
+  Serial.print(degrees);
+  Serial.print(", duration=");
+  Serial.println(duration);
+
+  float rotations = degrees / 360.0;
+  float rpm = rotations / (float(duration) / 60.0);
+  rpm = min(rpm, float(MOTOR_MOVE_RPM_MAX));
+  motorMove.setRPM(rpm);
+
+  long durationByRpm = long((rotations / rpm) * 60.0);
+
+  Serial.print("motorMoveStart | rpm | rotations=");
+  Serial.print(rotations);
+  Serial.print(", rpm=");
+  Serial.print(rpm);
+  Serial.print(", durationByRpm=");
+  Serial.println(durationByRpm);
+
+  // motorMove.setMicrostep(microsteps);
+  motorMove.setSpeedProfile(motorMove.CONSTANT_SPEED, accel, decel); //LINEAR_SPEED
+
+  if (directionIsForward)
   {
     degrees *= -1;
   }
-  degrees = motorMove.calcStepsForRotation(degrees);
-  motorMove.startMove(degrees, duration);
+  long steps = motorMove.calcStepsForRotation(degrees);
+
+  Serial.print("motorMoveStart | start | degrees=");
+  Serial.print(degrees);
+  Serial.print(", steps=");
+  Serial.println(steps);
+
+  motorMove.startMove(steps, duration);
+}
+
+void motorMoveStop()
+{
+  motorMove.stop();
 }
 
 //---------------------------------------------------
+
+void lcdClear()
+{
+  lcd.clear();
+}
 
 void lcdPrint(char *lineA, char *lineB)
 {
@@ -415,6 +557,36 @@ void lcdPrint(char *lineA, char *lineB)
   lcd.print(lineA);
   lcd.setCursor(0, 1);
   lcd.print(lineB);
+}
+
+void lcdPrintWorkSummary()
+{
+  strcpy(lcdLineB, "D: ");
+  strcat(lcdLineB, itoa(duration, lcdValue, 10));
+  strcat(lcdLineB, str_suffix_s);
+
+  lcdPrint(str_Summary, lcdLineB);
+}
+
+void lcdPrintWorkRide(int percent, bool direction, BasicStepperDriver::State state)
+{
+
+  strcpy(lcdLineA, str_Working);
+  // strcat(lcdLineA, ": ");
+  // strcat(lcdLineA, itoa(percent, lcdValue, 10));
+  // strcat(lcdLineA, "%");
+  strcat(lcdLineA, "      ");
+  strcat(lcdLineA, (direction) ? ">>>" : "<<<");
+
+  // itoa(percent, lcdLineB, 10);
+  // strcat(lcdLineB, "%");
+
+  // strcat(lcdLineB, " Dir: ");
+  // strcat(lcdLineB, (direction) ? ">>" : "<<");
+  strcpy(lcdLineB, "State: ");
+  strcat(lcdLineB, itoa(state, lcdValue, 10));
+
+  lcdPrint(lcdLineA, lcdLineB);
 }
 
 void lcdPrintInputListItem(char *header, char *listItem)
@@ -428,12 +600,12 @@ void lcdPrintInputListItem(char *header, char *listItem)
   lcdPrint(lcdLineA, lcdLineB);
 }
 
-void lcdPrintInputValueInt(char *header, int *value, char *suffix)
+void lcdPrintInputValueInt(char *header, int value, char *suffix)
 {
   strcpy(lcdLineA, header);
   strcat(lcdLineA, ":");
 
-  itoa(*value, lcdLineB, 10);
+  itoa(value, lcdLineB, 10);
   strcat(lcdLineB, suffix);
 
   lcdPrint(lcdLineA, lcdLineB);
@@ -489,7 +661,7 @@ InputAction inputValueInt(char *header, int *value, int defaultValue, char *suff
     if (inputTmpValueIntLast != defaultValue)
     {
       inputTmpValueIntLast = defaultValue;
-      lcdPrintInputValueInt(header, &defaultValue, suffix);
+      lcdPrintInputValueInt(header, defaultValue, suffix);
     }
   }
   else
@@ -497,7 +669,7 @@ InputAction inputValueInt(char *header, int *value, int defaultValue, char *suff
     if (inputTmpValueIntLast != *value)
     {
       inputTmpValueIntLast = *value;
-      lcdPrintInputValueInt(header, value, suffix);
+      lcdPrintInputValueInt(header, *value, suffix);
     }
   }
 
