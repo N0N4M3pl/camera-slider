@@ -56,14 +56,12 @@ LCD_I2C lcd(LCD_ADDRESS);
 #define MOTOR_STEPS 200
 
 const int MOTOR_RPM_MAX PROGMEM = 600;
-const int MOTOR_SLIDE_DISTANCE PROGMEM = 100;
+const int MOTOR_SLIDE_DISTANCE PROGMEM = 84;
 const int MOTOR_SLIDE_DISTANCE_HALF PROGMEM = MOTOR_SLIDE_DISTANCE / 2;
 const int MOTOR_SLIDE_DISTANCE_HALF_PWR PROGMEM = MOTOR_SLIDE_DISTANCE_HALF * MOTOR_SLIDE_DISTANCE_HALF;
 const int MOTOR_SLIDE_DISTANCE_IN_ONE_ROTATION PROGMEM = 4;
 const int MOTOR_SLIDE_ROTATIONS PROGMEM = MOTOR_SLIDE_DISTANCE / MOTOR_SLIDE_DISTANCE_IN_ONE_ROTATION;
-const long MOTOR_SLIDE_DEGREES_MAX PROGMEM = (MOTOR_SLIDE_ROTATIONS * 360);
-const long MOTOR_SLIDE_DEGREES_MOVE_MARGIN PROGMEM = 180;
-const long MOTOR_SLIDE_DEGREES_MOVE PROGMEM = MOTOR_SLIDE_DEGREES_MAX - MOTOR_SLIDE_DEGREES_MOVE_MARGIN;
+const long MOTOR_SLIDE_DEGREES_MOVE PROGMEM = (MOTOR_SLIDE_ROTATIONS * 360);
 const long MOTOR_SLIDE_DEGREES_MOVE_HALF PROGMEM = MOTOR_SLIDE_DEGREES_MOVE / 2;
 
 // https://github.com/laurb9/StepperDriver/blob/master/src/BasicStepperDriver.cpp
@@ -128,13 +126,8 @@ const double ANGLE_AHEAD PROGMEM = 180.0;
 
 enum MainState
 {
-  // WORK_SUMMARY,
-  // WORK,
-  // WORK_RIDE,
-  // CALIBRATE,
-
+  INITIAL,
   MOVE,
-
   MENU_MAIN,
   MENU_DURATION,
   MENU_BOUNCE_MODE,
@@ -169,7 +162,7 @@ enum Smoothing
   LONG
 };
 
-MainState _mainState;
+MainState _mainState = INITIAL;
 Position _positionCurrent = UNKNOWN;
 Position _positionTarget = UNKNOWN;
 
@@ -178,6 +171,7 @@ long _duration;
 BasicStepperDriver::Mode _smoothingMode = BasicStepperDriver::Mode::CONSTANT_SPEED;
 short _smoothingValue = 1;
 MainState _nextState;
+MainState _backState;
 
 bool _moveDirectionToRight;
 double _moveDegreesSlide = 0;
@@ -190,8 +184,8 @@ int _configFocalDistance = FOCAL_DISTANCE_MIN;
 double _configAngleLeft = ANGLE_AHEAD;
 double _configAngleRight = ANGLE_AHEAD;
 
-int _inputSettingsListIndex = 0;
-int _inputSettingsRotationListIndex = 0;
+int _inputMenuMainListIndex = 0;
+int _inputMenuRotationListIndex = 0;
 int _inputTmpListIndex = 0;
 int _inputTmpListIndexLast = 0;
 int _inputTmpValueInt = 0;
@@ -218,7 +212,7 @@ void setup()
   lcd.begin();
   lcd.backlight();
 
-  moveSetup(Position::LEFT, false, 1, Smoothing::OFF, MainState::MENU_MAIN));
+  moveSetup(Position::LEFT, false, 1, Smoothing::OFF, MainState::MENU_MAIN, MainState::MENU_MAIN);
   setState(MainState::MOVE);
 }
 
@@ -268,14 +262,18 @@ void loop()
 
 void setState(MainState mainState)
 {
-  _mainState = mainState;
+  Serial.print("setState | old=");
+  Serial.print(_mainState);
+  Serial.print(", new=");
+  Serial.println(mainState);
 
-  switch (_mainState)
+  switch (mainState)
   {
   case MainState::MOVE:
     moveStart();
     break;
   case MainState::MENU_MAIN:
+    _inputTmpListIndexLast = -1;
     break;
   case MainState::MENU_DURATION:
     _inputTmpValueIntLast = -1;
@@ -283,7 +281,7 @@ void setState(MainState mainState)
     break;
   case MainState::MENU_BOUNCE_MODE:
     _inputTmpListIndexLast = -1;
-    _inputTmpListIndex = _bounceMode; // false => 0, true => 1
+    _inputTmpListIndex = _configBounceMode; // false => 0, true => 1
     break;
   case MainState::MENU_SMOOTHING:
     _inputTmpListIndexLast = -1;
@@ -293,28 +291,43 @@ void setState(MainState mainState)
     break;
   case MainState::MENU_ROTATION_FOCAL_DISTANCE:
     _inputTmpValueIntLast = -1;
-    _inputTmpValueInt = FOCAL_DISTANCE_MIN;
+    _inputTmpValueInt = _configFocalDistance;
     break;
   case MainState::MENU_ROTATION_ANGLE_LEFT:
     _inputTmpValueIntLast = -1;
-    _inputTmpValueInt = ANGLE_AHEAD;
+    _inputTmpValueInt = _configAngleLeft;
     break;
   case MainState::MENU_ROTATION_ANGLE_RIGHT:
     _inputTmpValueIntLast = -1;
-    _inputTmpValueInt = ANGLE_AHEAD;
+    _inputTmpValueInt = _configAngleRight;
     break;
   case MainState::MENU_START:
     lcdPrintMenuStart();
     break;
   }
+
+  _mainState = mainState;
 }
 
 //---------------------------------------------------
 // MAIN: STATE: MOVE
 //---------------------------------------------------
 
-void moveSetup(Position positionTarget, bool bounceMode, long duration, Smoothing smoothing, MainState nextState)
+void moveSetup(Position positionTarget, bool bounceMode, long duration, Smoothing smoothing, MainState nextState, MainState backState)
 {
+  Serial.print("moveSetup | positionTarget=");
+  Serial.print(positionTarget);
+  Serial.print(", bounceMode=");
+  Serial.print(bounceMode);
+  Serial.print(", duration=");
+  Serial.print(duration);
+  Serial.print(", smoothing=");
+  Serial.print(smoothing);
+  Serial.print(", nextState=");
+  Serial.print(nextState);
+  Serial.print(", backState=");
+  Serial.println(backState);
+
   _positionTarget = positionTarget;
   _bounceMode = bounceMode;
   _duration = duration;
@@ -323,7 +336,7 @@ void moveSetup(Position positionTarget, bool bounceMode, long duration, Smoothin
   switch (smoothing)
   {
   case Smoothing::OFF:
-    _smoothingValue = 1;
+    _smoothingValue = 0;
     break;
   case Smoothing::SHORT:
     _smoothingValue = 1000;
@@ -337,21 +350,29 @@ void moveSetup(Position positionTarget, bool bounceMode, long duration, Smoothin
   }
 
   _nextState = nextState;
+  _backState = backState;
 }
 
 void moveStart()
 {
+  Serial.print("moveStart | _positionCurrent=");
+  Serial.print(_positionCurrent);
+  Serial.print(", _positionTarget=");
+  Serial.println(_positionTarget);
+
   if (_positionCurrent == Position::UNKNOWN)
   {
+    Serial.println("moveStart | Calibrating");
     lcdPrint(str_Calibrating, str_PleaseWait);
     _moveDirectionToRight = false;
-    _moveDegreesSlide = MOTOR_SLIDE_DEGREES_MAX;
+    _moveDegreesSlide = MOTOR_SLIDE_DEGREES_MOVE;
     moveMotorStart(1, BasicStepperDriver::Mode::CONSTANT_SPEED, 1);
   }
   else if (_positionCurrent == _positionTarget)
   {
     if (_bounceMode)
     {
+      Serial.println("moveStart | stop? | bounce");
       _positionTarget = (_positionTarget == Position::RIGHT) ? Position::LEFT : Position::RIGHT;
       _moveDirectionToRight = !_moveDirectionToRight;
       lcdPrintMove(_moveDirectionToRight, motorSlide.getCurrentState());
@@ -359,11 +380,14 @@ void moveStart()
     }
     else
     {
-      moveStop();
+      Serial.println("moveStart | stop? | stop");
+      moveStop(_nextState);
     }
   }
   else
   {
+    Serial.println("moveStart | start");
+
     switch (_positionCurrent)
     {
     case Position::LEFT:
@@ -382,15 +406,16 @@ void moveStart()
   }
 }
 
-void moveStop()
+void moveStop(MainState state)
 {
   motorSlideStop();
   motorRotateStop();
-  setState(_nextState);
+  setState(state);
 }
 
 void moveMotorStart(long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue)
 {
+  _positionCurrent = Position::UNKNOWN;
   motorSlideStart(_moveDegreesSlide, time, smoothingMode, smoothingValue, smoothingValue);
   if (_moveDegreesRotate > 0)
   {
@@ -417,7 +442,7 @@ void moveLoop()
     if (key == 'X')
     {
       _positionCurrent = Position::UNKNOWN;
-      moveStop();
+      moveStop(_backState);
       return;
     }
   }
@@ -434,10 +459,10 @@ void moveLoop()
 
 void menuMainLoop()
 {
-  InputAction inputAction = inputList(str_Main, strListSize_Main, strList_Main, &_inputSettingsListIndex);
+  InputAction inputAction = inputList(str_Main, strListSize_Main, strList_Main, &_inputMenuMainListIndex);
   if (inputAction == InputAction::ACCEPT)
   {
-    switch (_inputSettingsListIndex)
+    switch (_inputMenuMainListIndex)
     {
     case 0:
       setState(MainState::MENU_DURATION);
@@ -452,7 +477,8 @@ void menuMainLoop()
       setState(MainState::MENU_ROTATION);
       break;
     case 4:
-      setState(MainState::MENU_START);
+      moveSetup(Position::LEFT, false, 1, Smoothing::OFF, MainState::MENU_START, MainState::MENU_MAIN);
+      setState(MainState::MOVE);
       break;
     }
   }
@@ -506,20 +532,23 @@ void menuSmoothingLoop()
 
 void menuRotationLoop()
 {
-  InputAction inputAction = inputList(str_Rotation, strListSize_Rotation, strList_Rotation, &_inputSettingsRotationListIndex);
+  InputAction inputAction = inputList(str_Rotation, strListSize_Rotation, strList_Rotation, &_inputMenuRotationListIndex);
   switch (inputAction)
   {
   case InputAction::ACCEPT:
-    switch (_inputSettingsRotationListIndex)
+    switch (_inputMenuRotationListIndex)
     {
     case 0:
-      setState(MainState::MENU_ROTATION_FOCAL_DISTANCE);
+      moveSetup(Position::CENTER, false, 1, Smoothing::OFF, MainState::MENU_ROTATION_FOCAL_DISTANCE, MainState::MENU_ROTATION);
+      setState(MainState::MOVE);
       break;
     case 1:
-      setState(MainState::MENU_ROTATION_ANGLE_LEFT);
+      moveSetup(Position::LEFT, false, 1, Smoothing::OFF, MainState::MENU_ROTATION_ANGLE_LEFT, MainState::MENU_ROTATION);
+      setState(MainState::MOVE);
       break;
     case 2:
-      setState(MainState::MENU_ROTATION_ANGLE_RIGHT);
+      moveSetup(Position::RIGHT, false, 1, Smoothing::OFF, MainState::MENU_ROTATION_ANGLE_RIGHT, MainState::MENU_ROTATION);
+      setState(MainState::MOVE);
       break;
     }
     break;
@@ -593,6 +622,7 @@ void menuStartLoop()
     switch (key)
     {
     case 'V':
+      moveSetup(Position::RIGHT, _configBounceMode, _configDuration, _configSmoothing, MainState::MENU_MAIN, MainState::MENU_MAIN);
       setState(MainState::MOVE);
       break;
     case 'X':
@@ -718,7 +748,7 @@ void lcdPrint(char *lineA, char *lineB)
 void lcdPrintMenuStart()
 {
   strcpy(_lcdLineB, "D: ");
-  strcat(_lcdLineB, itoa(_duration, _lcdValue, 10));
+  strcat(_lcdLineB, itoa(_configDuration, _lcdValue, 10));
   strcat(_lcdLineB, str_suffix_s);
 
   lcdPrint(str_Summary, _lcdLineB);
@@ -873,8 +903,8 @@ console.log('A=' + A);
 */
 double calculateAngleBase()
 {
-  double sideDistance = sqrt(targetDistance * targetDistance + MOTOR_SLIDE_DISTANCE_HALF_PWR);
-  double sinAngle = targetDistance / sideDistance;
+  double sideDistance = sqrt(_configFocalDistance * _configFocalDistance + MOTOR_SLIDE_DISTANCE_HALF_PWR);
+  double sinAngle = _configFocalDistance / sideDistance;
   double angleBase = asin(sinAngle) * RAD_TO_DEG;
   return angleBase;
 }
