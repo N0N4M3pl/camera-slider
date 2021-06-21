@@ -77,7 +77,9 @@ const char str_Duration[] = "Duration";
 const char str_BounceMode[] = "Bounce mode";
 const char str_Smoothing[] = "Smoothing";
 const char str_Rotation[] = "Rotation";
+const char str_RotationMode[] = "Rotation mode";
 const char str_FocalDistance[] = "Focal distance";
+const char str_Angle[] = "Angle";
 const char str_AngleLeft[] = "Angle (LEFT)";
 const char str_AngleRight[] = "Angle (RIGHT)";
 const char str_Start[] = "[START]";
@@ -110,7 +112,10 @@ const int strListSize_Smoothing = 4;
 const char *strList_Smoothing[strListSize_Smoothing] = {str_Off, str_Short, str_Medium, str_Long};
 
 const int strListSize_Rotation = 3;
-const char *strList_Rotation[strListSize_Rotation] = {str_FocalDistance, str_AngleLeft, str_AngleRight};
+const char *strList_Rotation[strListSize_Rotation] = {str_RotationMode, str_AngleLeft, str_AngleRight};
+
+const int strListSize_RotationMode = 2;
+const char *strList_RotationMode[strListSize_RotationMode] = {str_FocalDistance, str_Angle};
 
 //---------------------------------------------------
 // MAIN
@@ -133,7 +138,7 @@ enum MainState
   MENU_BOUNCE_MODE,
   MENU_SMOOTHING,
   MENU_ROTATION,
-  MENU_ROTATION_FOCAL_DISTANCE,
+  MENU_ROTATION_MODE,
   MENU_ROTATION_ANGLE_LEFT,
   MENU_ROTATION_ANGLE_RIGHT,
   MENU_START
@@ -143,15 +148,7 @@ enum Position
 {
   UNKNOWN,
   LEFT,
-  CENTER,
   RIGHT
-};
-
-enum InputAction
-{
-  NOTHING,
-  ACCEPT,
-  CANCEL
 };
 
 enum Smoothing
@@ -160,6 +157,13 @@ enum Smoothing
   SHORT,
   MEDIUM,
   LONG
+};
+
+enum InputAction
+{
+  NOTHING,
+  ACCEPT,
+  CANCEL
 };
 
 MainState _mainState = INITIAL;
@@ -180,6 +184,7 @@ double _moveDegreesRotate = 0;
 long _configDuration = 60;
 bool _configBounceMode = true;
 Smoothing _configSmoothing = OFF;
+bool _configRotationByFocalDistance = true;
 int _configFocalDistance = FOCAL_DISTANCE_MIN;
 double _configAngleLeft = ANGLE_AHEAD;
 double _configAngleRight = ANGLE_AHEAD;
@@ -241,8 +246,8 @@ void loop()
   case MainState::MENU_ROTATION:
     menuRotationLoop();
     break;
-  case MainState::MENU_ROTATION_FOCAL_DISTANCE:
-    menuRotationFocalDistanceLoop();
+  case MainState::MENU_ROTATION_MODE:
+    menuRotationModeLoop();
     break;
   case MainState::MENU_ROTATION_ANGLE_LEFT:
     menuRotationAngleLeftLoop();
@@ -289,17 +294,21 @@ void setState(MainState mainState)
     break;
   case MainState::MENU_ROTATION:
     break;
-  case MainState::MENU_ROTATION_FOCAL_DISTANCE:
-    _inputTmpValueIntLast = -1;
-    _inputTmpValueInt = _configFocalDistance;
+  case MainState::MENU_ROTATION_MODE:
+    _inputTmpListIndexLast = -1;
+    _inputTmpListIndex = _configRotationByFocalDistance; // false => 0, true => 1
     break;
+  // case MainState::MENU_ROTATION_FOCAL_DISTANCE:
+  //   _inputTmpValueIntLast = -1;
+  //   _inputTmpValueInt = _configFocalDistance;
+  //   break;
   case MainState::MENU_ROTATION_ANGLE_LEFT:
     _inputTmpValueIntLast = -1;
-    _inputTmpValueInt = _configAngleLeft;
+    _inputTmpValueInt = (_configRotationByFocalDistance) ? _configFocalDistance : _configAngleLeft;
     break;
   case MainState::MENU_ROTATION_ANGLE_RIGHT:
     _inputTmpValueIntLast = -1;
-    _inputTmpValueInt = _configAngleRight;
+    _inputTmpValueInt = (_configRotationByFocalDistance) ? _configFocalDistance : _configAngleRight;
     break;
   case MainState::MENU_START:
     lcdPrintMenuStart();
@@ -360,19 +369,11 @@ void moveStart()
   Serial.print(", _positionTarget=");
   Serial.println(_positionTarget);
 
-  if (_positionCurrent == Position::UNKNOWN)
-  {
-    Serial.println("moveStart | Calibrating");
-    lcdPrint(str_Calibrating, str_PleaseWait);
-    _moveDirectionToRight = false;
-    _moveDegreesSlide = MOTOR_SLIDE_DEGREES_MOVE;
-    moveMotorStart(1, BasicStepperDriver::Mode::CONSTANT_SPEED, 1);
-  }
-  else if (_positionCurrent == _positionTarget)
+  if (_positionCurrent == _positionTarget)
   {
     if (_bounceMode)
     {
-      Serial.println("moveStart | stop? | bounce");
+      Serial.println("moveStart | bounce");
       _positionTarget = (_positionTarget == Position::RIGHT) ? Position::LEFT : Position::RIGHT;
       _moveDirectionToRight = !_moveDirectionToRight;
       lcdPrintMove(_moveDirectionToRight, motorSlide.getCurrentState());
@@ -380,29 +381,30 @@ void moveStart()
     }
     else
     {
-      Serial.println("moveStart | stop? | stop");
+      Serial.println("moveStart | stop");
       moveStop(_nextState);
     }
   }
   else
   {
-    Serial.println("moveStart | start");
-
     switch (_positionCurrent)
     {
     case Position::LEFT:
     case Position::RIGHT:
+      Serial.println("moveStart | start");
       _moveDirectionToRight = (_positionCurrent == Position::LEFT);
       _moveDegreesSlide = (_positionTarget == Position::CENTER) ? MOTOR_SLIDE_DEGREES_MOVE_HALF : MOTOR_SLIDE_DEGREES_MOVE;
+      lcdPrintMove(_moveDirectionToRight, motorSlide.getCurrentState());
+      moveMotorStart(_duration, _smoothingMode, _smoothingValue);
       break;
-    case Position::CENTER:
-      _moveDirectionToRight = (_positionTarget == Position::RIGHT);
-      _moveDegreesSlide = MOTOR_SLIDE_DEGREES_MOVE_HALF;
+    case Position::UNKNOWN:
+      Serial.println("moveStart | calibrating");
+      lcdPrint(str_Calibrating, str_PleaseWait);
+      _moveDirectionToRight = false;
+      _moveDegreesSlide = MOTOR_SLIDE_DEGREES_MOVE;
+      moveMotorStart(1, BasicStepperDriver::Mode::CONSTANT_SPEED, 1);
       break;
     }
-
-    lcdPrintMove(_moveDirectionToRight, motorSlide.getCurrentState());
-    moveMotorStart(_duration, _smoothingMode, _smoothingValue);
   }
 }
 
@@ -539,8 +541,7 @@ void menuRotationLoop()
     switch (_inputMenuRotationListIndex)
     {
     case 0:
-      moveSetup(Position::CENTER, false, 1, Smoothing::OFF, MainState::MENU_ROTATION_FOCAL_DISTANCE, MainState::MENU_ROTATION);
-      setState(MainState::MOVE);
+      setState(MainState::MENU_ROTATION_MODE);
       break;
     case 1:
       moveSetup(Position::LEFT, false, 1, Smoothing::OFF, MainState::MENU_ROTATION_ANGLE_LEFT, MainState::MENU_ROTATION);
@@ -558,19 +559,14 @@ void menuRotationLoop()
   }
 }
 
-void menuRotationFocalDistanceLoop()
+void menuRotationModeLoop()
 {
-  InputAction inputAction = inputValueInt(str_FocalDistance, &_inputTmpValueInt, _configFocalDistance, str_suffix_cm);
+  InputAction inputAction = inputList(str_RotationMode, strListSize_RotationMode, strList_RotationMode, &_inputTmpListIndex);
   switch (inputAction)
   {
   case (InputAction::ACCEPT):
-    _inputTmpValueInt = min(max(_inputTmpValueInt, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
-    _configFocalDistance = _inputTmpValueInt;
-    double angleBase = calculateAngleBase();
-    _configAngleLeft = 270.0 - angleBase;
-    _configAngleRight = 90.0 + angleBase;
-    _moveDegreesRotate = _configAngleRight - _configAngleLeft;
-    setState(MainState::MENU_MAIN);
+    _configRotationByFocalDistance = _inputTmpListIndex; // 0 => false, 1 => true
+    setState(MainState::MENU_ROTATION);
     break;
   case (InputAction::CANCEL):
     setState(MainState::MENU_ROTATION);
@@ -578,17 +574,56 @@ void menuRotationFocalDistanceLoop()
   }
 }
 
+// void menuRotationFocalDistanceLoop()
+// {
+//   InputAction inputAction = inputValueInt(str_FocalDistance, &_inputTmpValueInt, _configFocalDistance, str_suffix_cm);
+//   switch (inputAction)
+//   {
+//   case (InputAction::ACCEPT):
+//     _inputTmpValueInt = min(max(_inputTmpValueInt, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
+//     _configFocalDistance = _inputTmpValueInt;
+//     double angleBase = calculateAngleBase();
+//     _configAngleLeft = 270.0 - angleBase;
+//     _configAngleRight = 90.0 + angleBase;
+//     _moveDegreesRotate = _configAngleRight - _configAngleLeft;
+//     setState(MainState::MENU_MAIN);
+//     break;
+//   case (InputAction::CANCEL):
+//     setState(MainState::MENU_ROTATION);
+//     break;
+//   }
+// }
+
 void menuRotationAngleLeftLoop()
 {
-  InputAction inputAction = inputValueInt(str_AngleLeft, &_inputTmpValueInt, _configAngleLeft, str_suffix_degree);
+  if (_configRotationByFocalDistance)
+  {
+    InputAction inputAction = inputValueInt(str_FocalDistance, &_inputTmpValueInt, _configFocalDistance, str_suffix_cm);
+  }
+  else
+  {
+    InputAction inputAction = inputValueInt(str_AngleLeft, &_inputTmpValueInt, _configAngleLeft, str_suffix_degree);
+  }
   switch (inputAction)
   {
   case (InputAction::ACCEPT):
-    _inputTmpValueInt = min(max(_inputTmpValueInt, ANGLE_MIN), ANGLE_MAX);
-    _configAngleLeft = _inputTmpValueInt;
-    _configFocalDistance = 0;
+    if (_configRotationByFocalDistance)
+    {
+      _inputTmpValueInt = min(max(_inputTmpValueInt, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
+      _configFocalDistance = _inputTmpValueInt;
+      double angleBase = calculateAngleBase();
+      _configAngleLeft = 270.0 - angleBase;
+      _configAngleRight = 90.0 + angleBase;
+    }
+    else
+    {
+      _inputTmpValueInt = min(max(_inputTmpValueInt, ANGLE_MIN), ANGLE_MAX);
+      _configAngleLeft = _inputTmpValueInt;
+      _configFocalDistance = 0;
+    }
+    _moveDegreesRotate = _configAngleRight - _configAngleLeft;
     // rotationIsEnabled = (_configAngleLeft != _configAngleRight);
-    setState(MainState::MENU_MAIN);
+    setState(MainState::MENU_ROTATION);
     break;
   case (InputAction::CANCEL):
     setState(MainState::MENU_ROTATION);
@@ -598,15 +633,34 @@ void menuRotationAngleLeftLoop()
 
 void menuRotationAngleRightLoop()
 {
-  InputAction inputAction = inputValueInt(str_AngleLeft, &_inputTmpValueInt, _configAngleRight, str_suffix_degree);
+  if (_configRotationByFocalDistance)
+  {
+    InputAction inputAction = inputValueInt(str_FocalDistance, &_inputTmpValueInt, _configFocalDistance, str_suffix_cm);
+  }
+  else
+  {
+    InputAction inputAction = inputValueInt(str_AngleRight, &_inputTmpValueInt, _configAngleRight, str_suffix_degree);
+  }
   switch (inputAction)
   {
   case (InputAction::ACCEPT):
-    _inputTmpValueInt = min(max(_inputTmpValueInt, ANGLE_MIN), ANGLE_MAX);
-    _configAngleRight = _inputTmpValueInt;
-    _configFocalDistance = 0;
+    if (_configRotationByFocalDistance)
+    {
+      _inputTmpValueInt = min(max(_inputTmpValueInt, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
+      _configFocalDistance = _inputTmpValueInt;
+      double angleBase = calculateAngleBase();
+      _configAngleLeft = 270.0 - angleBase;
+      _configAngleRight = 90.0 + angleBase;
+    }
+    else
+    {
+      _inputTmpValueInt = min(max(_inputTmpValueInt, ANGLE_MIN), ANGLE_MAX);
+      _configAngleRight = _inputTmpValueInt;
+      _configFocalDistance = 0;
+    }
+    _moveDegreesRotate = _configAngleRight - _configAngleLeft;
     // rotationIsEnabled = (_configAngleLeft != _configAngleRight);
-    setState(MainState::MENU_MAIN);
+    setState(MainState::MENU_ROTATION);
     break;
   case (InputAction::CANCEL):
     setState(MainState::MENU_ROTATION);
