@@ -574,26 +574,6 @@ void menuRotationModeLoop()
   }
 }
 
-// void menuRotationFocalDistanceLoop()
-// {
-//   InputAction inputAction = inputValueInt(str_FocalDistance, &_inputTmpValueInt, _configFocalDistance, str_suffix_cm);
-//   switch (inputAction)
-//   {
-//   case (InputAction::ACCEPT):
-//     _inputTmpValueInt = min(max(_inputTmpValueInt, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
-//     _configFocalDistance = _inputTmpValueInt;
-//     double angleBase = calculateAngleBase();
-//     _configAngleLeft = 270.0 - angleBase;
-//     _configAngleRight = 90.0 + angleBase;
-//     _moveDegreesRotate = _configAngleRight - _configAngleLeft;
-//     setState(MainState::MENU_MAIN);
-//     break;
-//   case (InputAction::CANCEL):
-//     setState(MainState::MENU_ROTATION);
-//     break;
-//   }
-// }
-
 void menuRotationAngleLeftLoop()
 {
   if (_configRotationByFocalDistance)
