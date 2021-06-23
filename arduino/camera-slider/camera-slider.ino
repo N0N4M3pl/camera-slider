@@ -62,7 +62,7 @@ const int MOTOR_SLIDE_DISTANCE_HALF_PWR PROGMEM = MOTOR_SLIDE_DISTANCE_HALF * MO
 const int MOTOR_SLIDE_DISTANCE_IN_ONE_ROTATION PROGMEM = 4;
 const int MOTOR_SLIDE_ROTATIONS PROGMEM = MOTOR_SLIDE_DISTANCE / MOTOR_SLIDE_DISTANCE_IN_ONE_ROTATION;
 const long MOTOR_SLIDE_DEGREES_MOVE PROGMEM = (MOTOR_SLIDE_ROTATIONS * 360);
-const long MOTOR_SLIDE_DEGREES_MOVE_HALF PROGMEM = MOTOR_SLIDE_DEGREES_MOVE / 2;
+const long MOTOR_SLIDE_DEGREES_MOVE_CALIBRATING PROGMEM = MOTOR_SLIDE_DEGREES_MOVE + 360;
 
 // https://github.com/laurb9/StepperDriver/blob/master/src/BasicStepperDriver.cpp
 DRV8825 motorSlide(MOTOR_STEPS, PIN_MOTOR_SLIDE_DIR, PIN_MOTOR_SLIDE_STEP, PIN_MOTOR_SLIDE_M0, PIN_MOTOR_SLIDE_M1, PIN_MOTOR_SLIDE_M2);
@@ -178,8 +178,8 @@ MainState _nextState;
 MainState _backState;
 
 bool _moveDirectionToRight;
-double _moveDegreesSlide = 0;
-double _moveDegreesRotate = 0;
+double _moveDegreesSlide = 0.0;
+double _moveDegreesRotate = 0.0;
 
 long _configDuration = 60;
 bool _configBounceMode = true;
@@ -217,7 +217,7 @@ void setup()
   lcd.begin();
   lcd.backlight();
 
-  moveSetup(Position::LEFT, false, 1, Smoothing::OFF, MainState::MENU_MAIN, MainState::MENU_MAIN);
+  moveSetup(Position::LEFT, MOTOR_SLIDE_DEGREES_MOVE_CALIBRATING, 0.0, 1, Smoothing::OFF, MainState::MENU_MAIN, MainState::MENU_MAIN);
   setState(MainState::MOVE);
 }
 
@@ -298,10 +298,6 @@ void setState(MainState mainState)
     _inputTmpListIndexLast = -1;
     _inputTmpListIndex = _configRotationByFocalDistance; // false => 0, true => 1
     break;
-  // case MainState::MENU_ROTATION_FOCAL_DISTANCE:
-  //   _inputTmpValueIntLast = -1;
-  //   _inputTmpValueInt = _configFocalDistance;
-  //   break;
   case MainState::MENU_ROTATION_ANGLE_LEFT:
     _inputTmpValueIntLast = -1;
     _inputTmpValueInt = (_configRotationByFocalDistance) ? _configFocalDistance : _configAngleLeft;
@@ -322,7 +318,7 @@ void setState(MainState mainState)
 // MAIN: STATE: MOVE
 //---------------------------------------------------
 
-void moveSetup(Position positionTarget, bool bounceMode, long duration, Smoothing smoothing, MainState nextState, MainState backState)
+void moveSetup(Position positionTarget, double degreesSlide, double degreesRotate, long duration, Smoothing smoothing, bool bounceMode, MainState nextState, MainState backState)
 {
   Serial.print("moveSetup | positionTarget=");
   Serial.print(positionTarget);
@@ -338,7 +334,8 @@ void moveSetup(Position positionTarget, bool bounceMode, long duration, Smoothin
   Serial.println(backState);
 
   _positionTarget = positionTarget;
-  _bounceMode = bounceMode;
+  _moveDegreesSlide = degreesSlide;
+  _moveDegreesRotate = degreesRotate;
   _duration = duration;
 
   _smoothingMode = (smoothing == Smoothing::OFF) ? BasicStepperDriver::Mode::CONSTANT_SPEED : BasicStepperDriver::Mode::LINEAR_SPEED;
@@ -358,6 +355,7 @@ void moveSetup(Position positionTarget, bool bounceMode, long duration, Smoothin
     break;
   }
 
+  _bounceMode = bounceMode;
   _nextState = nextState;
   _backState = backState;
 }
@@ -377,7 +375,7 @@ void moveStart()
       _positionTarget = (_positionTarget == Position::RIGHT) ? Position::LEFT : Position::RIGHT;
       _moveDirectionToRight = !_moveDirectionToRight;
       lcdPrintMove(_moveDirectionToRight, motorSlide.getCurrentState());
-      moveMotorStart(_duration, _smoothingMode, _smoothingValue);
+      moveMotorStart(_moveDirectionToRight, _moveDegreesSlide, _moveDegreesRotate, _duration, _smoothingMode, _smoothingValue);
     }
     else
     {
@@ -393,16 +391,13 @@ void moveStart()
     case Position::RIGHT:
       Serial.println("moveStart | start");
       _moveDirectionToRight = (_positionCurrent == Position::LEFT);
-      _moveDegreesSlide = (_positionTarget == Position::CENTER) ? MOTOR_SLIDE_DEGREES_MOVE_HALF : MOTOR_SLIDE_DEGREES_MOVE;
       lcdPrintMove(_moveDirectionToRight, motorSlide.getCurrentState());
-      moveMotorStart(_duration, _smoothingMode, _smoothingValue);
+      moveMotorStart(_moveDirectionToRight, _moveDegreesSlide, _moveDegreesRotate, _duration, _smoothingMode, _smoothingValue);
       break;
     case Position::UNKNOWN:
       Serial.println("moveStart | calibrating");
       lcdPrint(str_Calibrating, str_PleaseWait);
-      _moveDirectionToRight = false;
-      _moveDegreesSlide = MOTOR_SLIDE_DEGREES_MOVE;
-      moveMotorStart(1, BasicStepperDriver::Mode::CONSTANT_SPEED, 1);
+      moveMotorStart(false, MOTOR_SLIDE_DEGREES_MOVE_CALIBRATING, 0.0, 1, BasicStepperDriver::Mode::CONSTANT_SPEED, 1);
       break;
     }
   }
@@ -415,11 +410,14 @@ void moveStop(MainState state)
   setState(state);
 }
 
-void moveMotorStart(long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue)
+void moveMotorStart(bool directionToRight, double degreesSlide, double degreesRotate, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue)
 {
   _positionCurrent = Position::UNKNOWN;
-  motorSlideStart(_moveDegreesSlide, time, smoothingMode, smoothingValue, smoothingValue);
-  if (_moveDegreesRotate > 0)
+  if (degreesSlide > 0)
+  {
+    motorSlideStart(directionToRight, degreesSlide, time, smoothingMode, smoothingValue, smoothingValue);
+  }
+  if (degreesRotate > 0)
   {
     // motorRotationStart
   }
@@ -430,7 +428,7 @@ void moveLoop()
   long waitTime = motorSlide.nextAction();
   if (waitTime)
   {
-    if (!_moveDirectionToRight)
+    if (motorSlide.getDirection() == 1) //getDirection --> Get movement direction: forward +1, back -1
     {
       bool switchValue = digitalRead(PIN_SWITCH);
       if (switchValue == HIGH)
@@ -479,7 +477,7 @@ void menuMainLoop()
       setState(MainState::MENU_ROTATION);
       break;
     case 4:
-      moveSetup(Position::LEFT, false, 1, Smoothing::OFF, MainState::MENU_START, MainState::MENU_MAIN);
+      moveSetup(Position::LEFT, MOTOR_SLIDE_DEGREES_MOVE_CALIBRATING, 0.0, 1, Smoothing::OFF, MainState::MENU_START, MainState::MENU_MAIN);
       setState(MainState::MOVE);
       break;
     }
@@ -544,11 +542,11 @@ void menuRotationLoop()
       setState(MainState::MENU_ROTATION_MODE);
       break;
     case 1:
-      moveSetup(Position::LEFT, false, 1, Smoothing::OFF, MainState::MENU_ROTATION_ANGLE_LEFT, MainState::MENU_ROTATION);
+      moveSetup(Position::LEFT, MOTOR_SLIDE_DEGREES_MOVE, 0.0, false, 1, Smoothing::OFF, MainState::MENU_ROTATION_ANGLE_LEFT, MainState::MENU_ROTATION);
       setState(MainState::MOVE);
       break;
     case 2:
-      moveSetup(Position::RIGHT, false, 1, Smoothing::OFF, MainState::MENU_ROTATION_ANGLE_RIGHT, MainState::MENU_ROTATION);
+      moveSetup(Position::RIGHT, MOTOR_SLIDE_DEGREES_MOVE, 0.0, false, 1, Smoothing::OFF, MainState::MENU_ROTATION_ANGLE_RIGHT, MainState::MENU_ROTATION);
       setState(MainState::MOVE);
       break;
     }
@@ -601,9 +599,8 @@ void menuRotationAngleLeftLoop()
       _configAngleLeft = _inputTmpValueInt;
       _configFocalDistance = 0;
     }
-    _moveDegreesRotate = _configAngleRight - _configAngleLeft;
-    // rotationIsEnabled = (_configAngleLeft != _configAngleRight);
-    setState(MainState::MENU_ROTATION);
+    moveSetup(Position::LEFT, 0.0, 0.0, false, 1, Smoothing::OFF, MainState::MENU_ROTATION_ANGLE_LEFT, MainState::MENU_ROTATION);
+    setState(MainState::MOVE);
     break;
   case (InputAction::CANCEL):
     setState(MainState::MENU_ROTATION);
@@ -638,9 +635,8 @@ void menuRotationAngleRightLoop()
       _configAngleRight = _inputTmpValueInt;
       _configFocalDistance = 0;
     }
-    _moveDegreesRotate = _configAngleRight - _configAngleLeft;
-    // rotationIsEnabled = (_configAngleLeft != _configAngleRight);
-    setState(MainState::MENU_ROTATION);
+    moveSetup(Position::RIGHT, 0.0, 0.0, false, 1, Smoothing::OFF, MainState::MENU_ROTATION_ANGLE_RIGHT, MainState::MENU_ROTATION);
+    setState(MainState::MOVE);
     break;
   case (InputAction::CANCEL):
     setState(MainState::MENU_ROTATION);
@@ -656,7 +652,7 @@ void menuStartLoop()
     switch (key)
     {
     case 'V':
-      moveSetup(Position::RIGHT, _configBounceMode, _configDuration, _configSmoothing, MainState::MENU_MAIN, MainState::MENU_MAIN);
+      moveSetup(Position::RIGHT, MOTOR_SLIDE_DEGREES_MOVE, 0.0, _configDuration, _configSmoothing, MainState::MENU_MAIN, MainState::MENU_MAIN);
       setState(MainState::MOVE);
       break;
     case 'X':
@@ -670,7 +666,7 @@ void menuStartLoop()
 // MAIN: HELPERS
 //---------------------------------------------------
 
-void motorSlideStart(long degrees, long time, BasicStepperDriver::Mode smoothingMode, short smoothingAccel, short smoothingDecel) //, short microsteps)
+void motorSlideStart(bool directionToRight, long degrees, long time, BasicStepperDriver::Mode smoothingMode, short smoothingAccel, short smoothingDecel) //, short microsteps)
 {
   // degrees = min(degrees, MOTOR_SLIDE_DEGREES_MAX);
 
@@ -696,7 +692,7 @@ void motorSlideStart(long degrees, long time, BasicStepperDriver::Mode smoothing
   // motorSlide.setMicrostep(microsteps);
   motorSlide.setSpeedProfile(smoothingMode, smoothingAccel, smoothingDecel);
 
-  if (_moveDirectionToRight)
+  if (directionToRight)
   {
     degrees *= -1;
   }
@@ -715,7 +711,7 @@ void motorSlideStop()
   motorSlide.stop();
 }
 
-void motorRotateStart(long degrees, long time, BasicStepperDriver::Mode smoothingMode, short smoothingAccel, short smoothingDecel) //, short microsteps)
+void motorRotateStart(bool directionToRight, long degrees, long time, BasicStepperDriver::Mode smoothingMode, short smoothingAccel, short smoothingDecel) //, short microsteps)
 {
   if (degrees <= 0)
   {
@@ -744,7 +740,7 @@ void motorRotateStart(long degrees, long time, BasicStepperDriver::Mode smoothin
   // motorSlide.setMicrostep(microsteps);
   motorSlide.setSpeedProfile(smoothingMode, smoothingAccel, smoothingDecel);
 
-  if (_moveDirectionToRight)
+  if (directionToRight)
   {
     degrees *= -1;
   }
