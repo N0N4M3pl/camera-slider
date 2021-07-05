@@ -69,7 +69,7 @@ LCD_I2C lcd(LCD_ADDRESS);
 #define MOTOR_STEPS 200
 
 const int MOTOR_RPM_MAX PROGMEM = 600;
-const int MOTOR_SLIDE_DISTANCE PROGMEM = 84;
+const int MOTOR_SLIDE_DISTANCE PROGMEM = 30; //84;
 const int MOTOR_SLIDE_DISTANCE_HALF PROGMEM = MOTOR_SLIDE_DISTANCE / 2;
 const int MOTOR_SLIDE_DISTANCE_HALF_PWR PROGMEM = MOTOR_SLIDE_DISTANCE_HALF * MOTOR_SLIDE_DISTANCE_HALF;
 const int MOTOR_SLIDE_DISTANCE_IN_ONE_ROTATION PROGMEM = 4;
@@ -99,7 +99,7 @@ const char str_Start[] = "[START]";
 const char str_Calibrating[] = "Calibrating";
 const char str_PleaseWait[] = "Please wait ...";
 const char str_Summary[] = "Summary";
-const char str_Working[] = "Working";
+const char str_Moving[] = "Moving";
 const char str_On[] = "On";
 const char str_Off[] = "Off";
 const char str_Short[] = "Short";
@@ -108,8 +108,12 @@ const char str_Long[] = "Long";
 const char str_suffix_s[] = " s";
 const char str_suffix_cm[] = " cm";
 const char str_suffix_degree[] = " °";
-const char str_direction_forward[] = "   >>>";
-const char str_direction_backward[] = "   <<<";
+const char str_Moving_bounceMode_left[] = "|>-";
+const char str_Moving_bounceMode_right[] = "-<|";
+const char str_Moving_once_left[] = "---";
+const char str_Moving_once_right[] = "--|";
+const char str_Moving_direction_left[] = "--->>>>---";
+const char str_Moving_direction_right[] = "---<<<<---";
 const char str_Stopped[] = "Stopped";
 const char str_Accelerating[] = "Accelerating";
 const char str_Cruising[] = "Cruising";
@@ -398,7 +402,7 @@ void moveStart()
       _positionTarget = (_positionTarget == Position::RIGHT) ? Position::LEFT : Position::RIGHT;
       _moveDirectionToRight = !_moveDirectionToRight;
       // _moveDegreesRotate = _moveDegreesRotate * -1;
-      lcdPrintMove(_moveDirectionToRight, motorSlide.getCurrentState());
+      lcdPrintMove(_moveDirectionToRight, _bounceMode);
       moveMotorStart(_moveDirectionToRight, _moveDegreesSlide, _moveDegreesRotate, _duration, _smoothingMode, _smoothingValue);
     }
     else
@@ -415,7 +419,7 @@ void moveStart()
     case Position::RIGHT:
       // Serial.println("moveStart | start");
       _moveDirectionToRight = (_positionCurrent == Position::LEFT);
-      lcdPrintMove(_moveDirectionToRight, motorSlide.getCurrentState());
+      lcdPrintMove(_moveDirectionToRight, _bounceMode);
       moveMotorStart(_moveDirectionToRight, _moveDegreesSlide, _moveDegreesRotate, _duration, _smoothingMode, _smoothingValue);
       break;
     case Position::UNKNOWN:
@@ -443,7 +447,7 @@ void moveMotorStart(bool directionToRight, long degreesSlide, long degreesRotate
   }
   if (degreesRotate > 0)
   {
-    // motorRotationStart
+    motorRotateStart(directionToRight, degreesRotate, time, smoothingMode, smoothingValue, smoothingValue);
   }
 }
 
@@ -613,13 +617,12 @@ void menuRotationDegreesLeftLoop()
   switch (inputAction)
   {
   case (InputAction::ACCEPT):
+    float degreesOld = _configDegreesLeft;
     if (_configRotationByFocalDistance)
     {
       _inputTmpValueInt = min(max(_inputTmpValueInt, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
       _configFocalDistance = _inputTmpValueInt;
-      float degreeBase = calculateDegreesBase();
-      _configDegreesLeft = 270 - degreeBase;
-      _configDegreesRight = 90 + degreeBase;
+      setDegreesLeftRightByFocalDistance(_configFocalDistance);
     }
     else
     {
@@ -627,7 +630,7 @@ void menuRotationDegreesLeftLoop()
       _configDegreesLeft = _inputTmpValueInt;
       _configFocalDistance = 0;
     }
-    moveSetup(Position::LEFT, 0, 0, 0, 1, Smoothing::OFF, false, MainState::MENU_ROTATION_DEGREES_LEFT, MainState::MENU_ROTATION);
+    moveSetup(Position::LEFT, 0, _configDegreesLeft, degreesOld, 1, Smoothing::OFF, false, MainState::MENU_ROTATION_DEGREES_LEFT, MainState::MENU_ROTATION);
     setState(MainState::MOVE);
     break;
   case (InputAction::CANCEL):
@@ -650,13 +653,12 @@ void menuRotationDegreesRightLoop()
   switch (inputAction)
   {
   case (InputAction::ACCEPT):
+    float degreesOld = _configDegreesRight;
     if (_configRotationByFocalDistance)
     {
       _inputTmpValueInt = min(max(_inputTmpValueInt, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
       _configFocalDistance = _inputTmpValueInt;
-      float degreeBase = calculateDegreesBase();
-      _configDegreesLeft = 270 - degreeBase;
-      _configDegreesRight = 90 + degreeBase;
+      setDegreesLeftRightByFocalDistance(_configFocalDistance);
     }
     else
     {
@@ -664,7 +666,7 @@ void menuRotationDegreesRightLoop()
       _configDegreesRight = _inputTmpValueInt;
       _configFocalDistance = 0;
     }
-    moveSetup(Position::RIGHT, 0, 0, 0, 1, Smoothing::OFF, false, MainState::MENU_ROTATION_DEGREES_RIGHT, MainState::MENU_ROTATION);
+    moveSetup(Position::RIGHT, 0, degreesOld, _configDegreesRight, 1, Smoothing::OFF, false, MainState::MENU_ROTATION_DEGREES_RIGHT, MainState::MENU_ROTATION);
     setState(MainState::MOVE);
     break;
   case (InputAction::CANCEL):
@@ -742,11 +744,6 @@ void motorSlideStop()
 
 void motorRotateStart(bool directionToRight, long degrees, long time, BasicStepperDriver::Mode smoothingMode, short smoothingAccel, short smoothingDecel) //, short microsteps)
 {
-  if (degrees <= 0)
-  {
-    return;
-  }
-
   // Serial.print("motorRotateStart | input | degrees=");
   // Serial.print(degrees);
   // Serial.print(", time=");
@@ -769,7 +766,7 @@ void motorRotateStart(bool directionToRight, long degrees, long time, BasicStepp
   // motorSlide.setMicrostep(microsteps);
   motorSlide.setSpeedProfile(smoothingMode, smoothingAccel, smoothingDecel);
 
-  if (directionToRight)
+  if (!directionToRight)
   {
     degrees *= -1;
   }
@@ -813,27 +810,13 @@ void lcdPrintMenuStart()
   lcdPrint(str_Summary, _lcdLineB);
 }
 
-void lcdPrintMove(bool direction, BasicStepperDriver::State state)
+void lcdPrintMove(bool directionToRight, bool bounceMode)
 {
+  strcpy(_lcdLineA, str_Moving);
 
-  strcpy(_lcdLineA, str_Working);
-  strcat(_lcdLineA, (direction) ? str_direction_forward : str_direction_backward);
-
-  switch (state)
-  {
-  case BasicStepperDriver::State::STOPPED:
-    strcpy(_lcdLineB, str_Stopped);
-    break;
-  case BasicStepperDriver::State::ACCELERATING:
-    strcpy(_lcdLineB, str_Accelerating);
-    break;
-  case BasicStepperDriver::State::CRUISING:
-    strcpy(_lcdLineB, str_Cruising);
-    break;
-  case BasicStepperDriver::State::DECELERATING:
-    strcpy(_lcdLineB, str_Decelerating);
-    break;
-  }
+  strcpy(_lcdLineB, (bounceMode) ? str_Moving_bounceMode_left : str_Moving_once_left);
+  strcat(_lcdLineB, (directionToRight) ? str_Moving_direction_right : str_Moving_direction_left);
+  strcat(_lcdLineB, (bounceMode) ? str_Moving_bounceMode_right : str_Moving_once_right);
 
   lcdPrint(_lcdLineA, _lcdLineB);
 }
@@ -942,30 +925,13 @@ InputAction inputValueInt(char *header, int *value, int defaultValue, char *suff
 
 //---------------------------------------------------
 
-/*
-let TD = 10;
-const L = 100;
-
-const halfL = L / 2;
-console.log('halfL=' + halfL);
-
-const halfLPwr = halfL * halfL;
-console.log('halfLPwr=' + halfLPwr);
-
-const SD = Math.sqrt(TD * TD + halfLPwr);
-console.log('SD=' + SD);
-
-const sinA = TD / SD;
-console.log('sinA=' + sinA);
-const A = Math.asin(sinA) * 180/Math.PI
-console.log('A=' + A);
-*/
-float calculateDegreesBase()
+void setDegreesLeftRightByFocalDistance(int focalDistance)
 {
-  float result = sqrt(_configFocalDistance * _configFocalDistance + MOTOR_SLIDE_DISTANCE_HALF_PWR); //sideDistance
-  result = _configFocalDistance / result;                                                           //sinDegrees
-  result = asin(result) * RAD_TO_DEG;                                                               //degreesBase
-  return result;
+  float degreeBase = sqrt(focalDistance * focalDistance + MOTOR_SLIDE_DISTANCE_HALF_PWR);
+  degreeBase = focalDistance / degreeBase;
+  degreeBase = asin(degreeBase) * RAD_TO_DEG;
+  _configDegreesLeft = 270 - degreeBase;
+  _configDegreesRight = 90 + degreeBase;
 }
 
 //---------------------------------------------------
