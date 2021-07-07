@@ -138,10 +138,10 @@ const char *strList_RotationMode[strListSize_RotationMode] = {str_Separately, st
 // MAIN
 //---------------------------------------------------
 
-const long DURATION_MIN PROGMEM = 1;                    // 1 sec
-const long DURATION_MAX PROGMEM = 60 * 60 * 24;         // 1 day
-const int FOCAL_DISTANCE_MIN PROGMEM = 10;              // 10 cm
-const int FOCAL_DISTANCE_MAX PROGMEM = 100 * 1000 * 10; // 10 km
+const long DURATION_MIN PROGMEM = 1;            // 1 sec
+const long DURATION_MAX PROGMEM = 60 * 60 * 24; // 1 day
+const long FOCAL_DISTANCE_MIN PROGMEM = 10;    // 10 cm
+const long FOCAL_DISTANCE_MAX PROGMEM = 10000; // 100 m
 const float ROTATION_DEGREES_MIN PROGMEM = 0;
 const float ROTATION_DEGREES_MAX PROGMEM = 360;
 const float ROTATION_DEGREES_AHEAD PROGMEM = 180;
@@ -203,8 +203,8 @@ float _moveDegreesRotate = 0;
 long _configDuration = 10;      //60;
 bool _configBounceMode = false; //true;
 Smoothing _configSmoothing = OFF;
-bool _configRotationByFocalDistance = false; // true;
-int _configFocalDistance = FOCAL_DISTANCE_MIN;
+bool _configRotationByFocalDistance = true; // true;
+long _configFocalDistance = FOCAL_DISTANCE_MIN;
 float _configDegreesLeft = ROTATION_DEGREES_AHEAD;
 float _configDegreesRight = ROTATION_DEGREES_AHEAD;
 
@@ -214,6 +214,8 @@ int _inputTmpListIndex = 0;
 int _inputTmpListIndexLast = 0;
 int _inputTmpValueInt = 0;
 int _inputTmpValueIntLast = 0;
+long _inputTmpValueLong = 0;
+long _inputTmpValueLongLast = 0;
 float _inputTmpValueFloat = 0;
 float _inputTmpValueFloatLast = 0;
 
@@ -323,14 +325,14 @@ void setState(MainState mainState)
     _inputTmpListIndexLast = -1;
     break;
   case MainState::MENU_ROTATION_DEGREES_LEFT:
-    _inputTmpValueInt = -1;
-    _inputTmpValueIntLast = -1;
+    _inputTmpValueLong = -1;
+    _inputTmpValueLongLast = -1;
     _inputTmpValueFloat = -1;
     _inputTmpValueFloatLast = -1;
     break;
   case MainState::MENU_ROTATION_DEGREES_RIGHT:
-    _inputTmpValueInt = -1;
-    _inputTmpValueIntLast = -1;
+    _inputTmpValueLong = -1;
+    _inputTmpValueLongLast = -1;
     _inputTmpValueFloat = -1;
     _inputTmpValueFloatLast = -1;
     break;
@@ -622,7 +624,7 @@ void menuRotationDegreesLeftLoop()
   InputAction inputAction;
   if (_configRotationByFocalDistance)
   {
-    inputAction = inputValueInt(str_FocalDistance, &_inputTmpValueInt, _configFocalDistance, str_suffix_cm);
+    inputAction = inputValueLong(str_FocalDistance, &_inputTmpValueLong, _configFocalDistance, str_suffix_cm);
   }
   else
   {
@@ -633,14 +635,10 @@ void menuRotationDegreesLeftLoop()
   case (InputAction::ACCEPT):
   {
     float degreesOld = _configDegreesLeft;
-    Serial.print("menuRotationDegreesLeftLoop | degreesOld=");
-    Serial.print(degreesOld);
     if (_configRotationByFocalDistance)
     {
-      _inputTmpValueInt = min(max(_inputTmpValueInt, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
-      _configFocalDistance = _inputTmpValueInt;
-      Serial.print(", _configFocalDistance=");
-      Serial.print(_configFocalDistance);
+      _inputTmpValueLong = min(max(_inputTmpValueLong, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
+      _configFocalDistance = _inputTmpValueLong;
       setDegreesLeftRightByFocalDistance(_configFocalDistance);
     }
     else
@@ -649,6 +647,8 @@ void menuRotationDegreesLeftLoop()
       _configDegreesLeft = _inputTmpValueFloat;
       _configFocalDistance = 0;
     }
+    Serial.print("menuRotationDegreesLeftLoop | degreesOld=");
+    Serial.print(degreesOld);
     Serial.print(", _configDegreesLeft=");
     Serial.println(_configDegreesLeft);
     moveSetup(Position::LEFT, 0, _configDegreesLeft, degreesOld, 1, Smoothing::OFF, false, MainState::MENU_ROTATION_DEGREES_LEFT, MainState::MENU_ROTATION);
@@ -668,7 +668,7 @@ void menuRotationDegreesRightLoop()
   InputAction inputAction;
   if (_configRotationByFocalDistance)
   {
-    inputAction = inputValueInt(str_FocalDistance, &_inputTmpValueInt, _configFocalDistance, str_suffix_cm);
+    inputAction = inputValueLong(str_FocalDistance, &_inputTmpValueLong, _configFocalDistance, str_suffix_cm);
   }
   else
   {
@@ -679,14 +679,10 @@ void menuRotationDegreesRightLoop()
   case (InputAction::ACCEPT):
   {
     float degreesOld = _configDegreesRight;
-    Serial.print("menuRotationDegreesRightLoop | degreesOld=");
-    Serial.print(degreesOld);
     if (_configRotationByFocalDistance)
     {
-      _inputTmpValueInt = min(max(_inputTmpValueInt, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
-      _configFocalDistance = _inputTmpValueInt;
-      Serial.print(", _configFocalDistance=");
-      Serial.print(_configFocalDistance);
+      _inputTmpValueLong = min(max(_inputTmpValueLong, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
+      _configFocalDistance = _inputTmpValueLong;
       setDegreesLeftRightByFocalDistance(_configFocalDistance);
     }
     else
@@ -695,6 +691,8 @@ void menuRotationDegreesRightLoop()
       _configDegreesRight = _inputTmpValueFloat;
       _configFocalDistance = 0;
     }
+    Serial.print("menuRotationDegreesRightLoop | degreesOld=");
+    Serial.print(degreesOld);
     Serial.print(", _configDegreesRight=");
     Serial.println(_configDegreesRight);
     moveSetup(Position::RIGHT, 0, degreesOld, _configDegreesRight, 1, Smoothing::OFF, false, MainState::MENU_ROTATION_DEGREES_RIGHT, MainState::MENU_ROTATION);
@@ -876,7 +874,7 @@ void lcdPrintInputListItem(char *header, char *listItem, int index)
   lcdPrint(_lcdLineA, _lcdLineB);
 }
 
-void lcdPrintInputValueInt(char *header, int value, char *suffix)
+void lcdPrintInputValueLong(char *header, long value, char *suffix)
 {
   strcpy(_lcdLineA, header);
   strcat(_lcdLineA, str_colon);
@@ -937,7 +935,7 @@ InputAction inputValueInt(char *header, int *value, int defaultValue, char *suff
     if (_inputTmpValueIntLast != defaultValue)
     {
       _inputTmpValueIntLast = defaultValue;
-      lcdPrintInputValueInt(header, defaultValue, suffix);
+      lcdPrintInputValueLong(header, defaultValue, suffix);
     }
   }
   else
@@ -945,7 +943,59 @@ InputAction inputValueInt(char *header, int *value, int defaultValue, char *suff
     if (_inputTmpValueIntLast != *value)
     {
       _inputTmpValueIntLast = *value;
-      lcdPrintInputValueInt(header, *value, suffix);
+      lcdPrintInputValueLong(header, *value, suffix);
+    }
+  }
+
+  char key = keypad.getKey();
+  if (key != NO_KEY)
+  {
+    switch (key)
+    {
+    case KEY_V:
+    {
+      if (*value == -1)
+      {
+        *value = defaultValue;
+      }
+      return InputAction::ACCEPT;
+    }
+    case KEY_X:
+      return InputAction::CANCEL;
+    default:
+    {
+      if (*value == -1)
+      {
+        *value = (key - 48);
+      }
+      else
+      {
+        *value = ((*value) * 10) + (key - 48);
+      }
+      break;
+    }
+    }
+  }
+
+  return InputAction::NOTHING;
+}
+
+InputAction inputValueLong(char *header, long *value, long defaultValue, char *suffix)
+{
+  if (*value == -1)
+  {
+    if (_inputTmpValueLongLast != defaultValue)
+    {
+      _inputTmpValueLongLast = defaultValue;
+      lcdPrintInputValueLong(header, defaultValue, suffix);
+    }
+  }
+  else
+  {
+    if (_inputTmpValueLongLast != *value)
+    {
+      _inputTmpValueLongLast = *value;
+      lcdPrintInputValueLong(header, *value, suffix);
     }
   }
 
@@ -989,7 +1039,7 @@ InputAction inputValueFloat(char *header, float *value, float defaultValue, char
     if (_inputTmpValueFloatLast != defaultValue)
     {
       _inputTmpValueFloatLast = defaultValue;
-      lcdPrintInputValueInt(header, defaultValue, suffix);
+      lcdPrintInputValueLong(header, defaultValue, suffix);
     }
   }
   else
@@ -997,7 +1047,7 @@ InputAction inputValueFloat(char *header, float *value, float defaultValue, char
     if (_inputTmpValueFloatLast != *value)
     {
       _inputTmpValueFloatLast = *value;
-      lcdPrintInputValueInt(header, *value, suffix);
+      lcdPrintInputValueLong(header, *value, suffix);
     }
   }
 
@@ -1036,21 +1086,50 @@ InputAction inputValueFloat(char *header, float *value, float defaultValue, char
 
 //---------------------------------------------------
 
-void setDegreesLeftRightByFocalDistance(int focalDistance)
+/*
+let TD = 10;
+const L = 100;
+
+const halfL = L / 2;
+console.log('halfL=' + halfL);
+
+const halfLPwr = halfL * halfL;
+console.log('halfLPwr=' + halfLPwr);
+
+const SD = Math.sqrt(TD * TD + halfLPwr);
+console.log('SD=' + SD);
+
+const sinA = TD / SD;
+console.log('sinA=' + sinA);
+const A = Math.asin(sinA) * 180/Math.PI
+console.log('A=' + A);
+*/
+
+void setDegreesLeftRightByFocalDistance(long focalDistance)
 {
   Serial.print("setDegreesLeftRightByFocalDistance | focalDistance=");
   Serial.print(focalDistance);
-  float degreeBase = sqrt(focalDistance * focalDistance + MOTOR_SLIDE_DISTANCE_HALF_PWR);
-  Serial.print(", degreeBase=");
-  Serial.print(focalDistance);
-  degreeBase = focalDistance / degreeBase;
-  Serial.print(", degreeBase=");
-  Serial.print(focalDistance);
-  degreeBase = asin(degreeBase) * RAD_TO_DEG;
-  Serial.print(", degreeBase=");
-  Serial.println(focalDistance);
-  _configDegreesLeft = 270 - degreeBase;
-  _configDegreesRight = 90 + degreeBase;
+  long focalDistancePwr = focalDistance * focalDistance;
+  Serial.print(", focalDistancePwr=");
+  Serial.print(focalDistancePwr);
+  focalDistancePwr = focalDistancePwr + MOTOR_SLIDE_DISTANCE_HALF_PWR;
+  Serial.print(", focalDistancePwr=");
+  Serial.print(focalDistancePwr);
+  float sideDistance = sqrt(focalDistancePwr);
+  Serial.print(", sideDistance=");
+  Serial.print(sideDistance);
+  float sinAngle = focalDistance / sideDistance;
+  Serial.print(", sinAngle=");
+  Serial.print(sinAngle);
+  float degreesBase = asin(sinAngle) * RAD_TO_DEG;
+  Serial.print(", degreesBase=");
+  Serial.print(degreesBase);
+  _configDegreesLeft = 270 - degreesBase;
+  _configDegreesRight = 90 + degreesBase;
+  Serial.print(" | _configDegreesLeft=");
+  Serial.print(_configDegreesLeft);
+  Serial.print(", _configDegreesRight=");
+  Serial.println(_configDegreesRight);
 }
 
 //---------------------------------------------------
