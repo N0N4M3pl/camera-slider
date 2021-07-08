@@ -423,7 +423,7 @@ void moveStart()
       Serial.println("moveStart | bounce");
       _positionTarget = (_positionTarget == Position::RIGHT) ? Position::LEFT : Position::RIGHT;
       _moveDirectionToRight = !_moveDirectionToRight;
-      // _moveDegreesRotate = _moveDegreesRotate * -1;
+      _moveDegreesRotate = _moveDegreesRotate * -1;
       lcdPrintMove(_moveDirectionToRight, _bounceMode);
       moveMotorStart(_moveDirectionToRight, _moveDegreesSlide, _moveDegreesRotate, _duration, _smoothingMode, _smoothingValue);
     }
@@ -465,7 +465,7 @@ void moveStop(MainState state)
 }
 
 // time: in seconds
-void moveMotorStart(bool directionToRight, long degreesSlide, long degreesRotate, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue)
+void moveMotorStart(bool directionToRight, long degreesSlide, float degreesRotate, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue)
 {
   time = time * 1000000;
   long motorSlideSteps = 0;
@@ -767,10 +767,10 @@ long motorSlideCalcSteps(bool directionToRight, long degrees, long time, BasicSt
 
   long timeBySteps = max(time, motorSlide.getTimeForMove(steps));
 
-  // Serial.print("mSliCalcSteps | deg=");
-  // Serial.print(degrees);
-  // Serial.print(", t=");
-  // Serial.print(time);
+  Serial.print("mSliCalcSteps | deg=");
+  Serial.print(degrees);
+  Serial.print(", t=");
+  Serial.print(time);
   // Serial.print(", rot=");
   // Serial.print(rotations);
   // Serial.print(", rpm=");
@@ -779,17 +779,17 @@ long motorSlideCalcSteps(bool directionToRight, long degrees, long time, BasicSt
   // Serial.print(rpmNorm);
   // Serial.print(", st=");
   // Serial.print(steps);
-  // Serial.print(", tBySt=");
-  // Serial.println(timeBySteps);
+  Serial.print(", tBySt=");
+  Serial.println(timeBySteps);
 
   return steps;
 }
 
 // time: in microseconds
 // There are 1,000 microseconds in a millisecond and 1,000,000 microseconds in a second.
-long motorRotateCalcSteps(long degrees, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue) //, short microsteps)
+long motorRotateCalcSteps(float degrees, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue) //, short microsteps)
 {
-  degrees = degrees * 3;
+  degrees = degrees * 3.0;
 
   float rotations = degrees / 360.0;
   float rpm = abs(rotations) / float(time / 1000000.0 / 60.0);
@@ -802,10 +802,10 @@ long motorRotateCalcSteps(long degrees, long time, BasicStepperDriver::Mode smoo
 
   long timeBySteps = max(time, motorRotate.getTimeForMove(steps));
 
-  // Serial.print("mRotCalcSteps | degrees=");
-  // Serial.print(degrees);
-  // Serial.print(", t=");
-  // Serial.print(time);
+  Serial.print("mRotCalcSteps | degrees=");
+  Serial.print(degrees);
+  Serial.print(", t=");
+  Serial.print(time);
   // Serial.print(", rot=");
   // Serial.print(rotations);
   // Serial.print(", rpm=");
@@ -814,8 +814,8 @@ long motorRotateCalcSteps(long degrees, long time, BasicStepperDriver::Mode smoo
   // Serial.print(rpmNorm);
   // Serial.print(", st=");
   // Serial.print(steps);
-  // Serial.print(", tBySt=");
-  // Serial.println(timeBySteps);
+  Serial.print(", tBySt=");
+  Serial.println(timeBySteps);
 
   return steps;
 }
