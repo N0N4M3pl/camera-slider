@@ -70,7 +70,7 @@ LCD_I2C lcd(LCD_ADDRESS);
 #define MOTOR_STEPS 200
 
 const int MOTOR_MICROSTEPS PROGMEM = 16;     //32;
-const int MOTOR_RPM_MAX PROGMEM = 600;       //600;
+const int MOTOR_RPM_MAX PROGMEM = 120;       //600;
 const int MOTOR_SLIDE_DISTANCE PROGMEM = 84; //84;
 const int MOTOR_SLIDE_DISTANCE_HALF PROGMEM = MOTOR_SLIDE_DISTANCE / 2;
 const int MOTOR_SLIDE_DISTANCE_HALF_PWR PROGMEM = MOTOR_SLIDE_DISTANCE_HALF * MOTOR_SLIDE_DISTANCE_HALF;
@@ -147,7 +147,7 @@ const char *strList_RotationMode[strListSize_RotationMode] = {str_Separately, st
 // MAIN
 //---------------------------------------------------
 
-const long DURATION_MIN PROGMEM = 1;            // 1 sec
+const long DURATION_MIN PROGMEM = 30;           // 1 sec
 const long DURATION_MAX PROGMEM = 60 * 60 * 24; // 1 day
 const long FOCAL_DISTANCE_MIN PROGMEM = 10;     // 10 cm
 const long FOCAL_DISTANCE_MAX PROGMEM = 10000;  // 100 m
@@ -209,13 +209,13 @@ bool _moveDirectionToRight;
 long _moveDegreesSlide = 0;
 float _moveDegreesRotate = 0;
 
-long _configDuration = 20;                               //60;
-bool _configBounceMode = false;                          //true;
-Smoothing _configSmoothing = OFF;                        // OFF;
-bool _configRotationByFocalDistance = false;             // true;
-long _configFocalDistance = FOCAL_DISTANCE_MIN;          //FOCAL_DISTANCE_MIN;
-float _configDegreesLeft = ROTATION_DEGREES_AHEAD - 90;  // ROTATION_DEGREES_AHEAD;
-float _configDegreesRight = ROTATION_DEGREES_AHEAD + 90; // ROTATION_DEGREES_AHEAD;
+long _configDuration = 60;                          //60;
+bool _configBounceMode = true;                      //true;
+Smoothing _configSmoothing = OFF;                   // OFF;
+bool _configRotationByFocalDistance = true;         // true;
+long _configFocalDistance = FOCAL_DISTANCE_MIN;     //FOCAL_DISTANCE_MIN;
+float _configDegreesLeft = ROTATION_DEGREES_AHEAD;  // ROTATION_DEGREES_AHEAD;
+float _configDegreesRight = ROTATION_DEGREES_AHEAD; // ROTATION_DEGREES_AHEAD;
 
 int _inputMenuMainListIndex = 0;
 int _inputMenuRotationListIndex = 0;
@@ -767,20 +767,20 @@ long motorSlideCalcSteps(bool directionToRight, long degrees, long time, BasicSt
 
   long timeBySteps = max(time, motorSlide.getTimeForMove(steps));
 
-  Serial.print("mSliCalcSteps | deg=");
-  Serial.print(degrees);
-  Serial.print(", t=");
-  Serial.print(time);
-  Serial.print(", rot=");
-  Serial.print(rotations);
-  Serial.print(", rpm=");
-  Serial.print(rpm);
-  Serial.print(", rpmN=");
-  Serial.print(rpmNorm);
-  Serial.print(", st=");
-  Serial.print(steps);
-  Serial.print(", tBySt=");
-  Serial.println(timeBySteps);
+  // Serial.print("mSliCalcSteps | deg=");
+  // Serial.print(degrees);
+  // Serial.print(", t=");
+  // Serial.print(time);
+  // Serial.print(", rot=");
+  // Serial.print(rotations);
+  // Serial.print(", rpm=");
+  // Serial.print(rpm);
+  // Serial.print(", rpmN=");
+  // Serial.print(rpmNorm);
+  // Serial.print(", st=");
+  // Serial.print(steps);
+  // Serial.print(", tBySt=");
+  // Serial.println(timeBySteps);
 
   return steps;
 }
@@ -802,20 +802,20 @@ long motorRotateCalcSteps(long degrees, long time, BasicStepperDriver::Mode smoo
 
   long timeBySteps = max(time, motorRotate.getTimeForMove(steps));
 
-  Serial.print("mRotCalcSteps | degrees=");
-  Serial.print(degrees);
-  Serial.print(", t=");
-  Serial.print(time);
-  Serial.print(", rot=");
-  Serial.print(rotations);
-  Serial.print(", rpm=");
-  Serial.print(rpm);
-  Serial.print(", rpmN=");
-  Serial.print(rpmNorm);
-  Serial.print(", st=");
-  Serial.print(steps);
-  Serial.print(", tBySt=");
-  Serial.println(timeBySteps);
+  // Serial.print("mRotCalcSteps | degrees=");
+  // Serial.print(degrees);
+  // Serial.print(", t=");
+  // Serial.print(time);
+  // Serial.print(", rot=");
+  // Serial.print(rotations);
+  // Serial.print(", rpm=");
+  // Serial.print(rpm);
+  // Serial.print(", rpmN=");
+  // Serial.print(rpmNorm);
+  // Serial.print(", st=");
+  // Serial.print(steps);
+  // Serial.print(", tBySt=");
+  // Serial.println(timeBySteps);
 
   return steps;
 }
