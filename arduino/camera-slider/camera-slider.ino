@@ -114,9 +114,11 @@ const char str_Summary[] = "Summary";
 const char str_Moving[] = "Moving";
 const char str_On[] = "On";
 const char str_Off[] = "Off";
+const char str_Minimum[] = "Minimum";
 const char str_Short[] = "Short";
 const char str_Medium[] = "Medium";
 const char str_Long[] = "Long";
+const char str_Maximum[] = "Maximum";
 const char str_suffix_second[] = " s";
 const char str_suffix_cm[] = " cm";
 const char str_suffix_degree[] = " deg";
@@ -134,8 +136,8 @@ const char *strList_Main[strListSize_Main] = {str_Duration, str_BounceMode, str_
 const int strListSize_BounceMode = 2;
 const char *strList_BounceMode[strListSize_BounceMode] = {str_Off, str_On};
 
-const int strListSize_Smoothing = 4;
-const char *strList_Smoothing[strListSize_Smoothing] = {str_Off, str_Short, str_Medium, str_Long};
+const int strListSize_Smoothing = 6;
+const char *strList_Smoothing[strListSize_Smoothing] = {str_Off, str_Minimum, str_Short, str_Medium, str_Long, str_Maximum};
 
 const int strListSize_Rotation = 3;
 const char *strList_Rotation[strListSize_Rotation] = {str_RotationMode, str_LeftSide, str_RightSide};
@@ -147,10 +149,14 @@ const char *strList_RotationMode[strListSize_RotationMode] = {str_Separately, st
 // MAIN
 //---------------------------------------------------
 
-const long DURATION_MIN PROGMEM = 30;           // 1 sec
-const long DURATION_MAX PROGMEM = 60 * 60 * 24; // 1 day
-const long FOCAL_DISTANCE_MIN PROGMEM = 10;     // 10 cm
-const long FOCAL_DISTANCE_MAX PROGMEM = 10000;  // 100 m
+const long DURATION_MIN PROGMEM = 16;                       // 16 sec, in seconds
+const long DURATION_MAX PROGMEM = 86400;                    // 1 day, in seconds
+const long DURATION_CORRECTION_RANGE_MIN PROGMEM = 16000;   // 16 sec, in milliseconds
+const long DURATION_CORRECTION_RANGE_MAX PROGMEM = 3600000; // 1 hour, in milliseconds
+const long DURATION_CORRECTION PROGMEM = 5300;              // 5.3 sec, in milliseconds
+const long DURATION_CALIBRATING PROGMEM = 10625;            // minimal time from logs, in seconds
+const long FOCAL_DISTANCE_MIN PROGMEM = 10;                 // 10 cm
+const long FOCAL_DISTANCE_MAX PROGMEM = 10000;              // 100 m
 const float ROTATION_DEGREES_MIN PROGMEM = 0;
 const float ROTATION_DEGREES_MAX PROGMEM = 360;
 const float ROTATION_DEGREES_AHEAD PROGMEM = 180;
@@ -182,9 +188,11 @@ enum Position
 enum Smoothing
 {
   OFF,
+  MINIMUM,
   SHORT,
   MEDIUM,
-  LONG
+  LONG,
+  MAXIMUM
 };
 
 enum InputAction
@@ -209,11 +217,11 @@ bool _moveDirectionToRight;
 long _moveDegreesSlide = 0;
 float _moveDegreesRotate = 0;
 
-long _configDuration = 60;                          //60;
-bool _configBounceMode = true;                      //true;
-Smoothing _configSmoothing = OFF;                   // OFF;
+long _configDuration = 60;                          // 60;
+bool _configBounceMode = false;                     // false;
+Smoothing _configSmoothing = Smoothing::MINIMUM;    // MINIMUM;
 bool _configRotationByFocalDistance = true;         // true;
-long _configFocalDistance = FOCAL_DISTANCE_MIN;     //FOCAL_DISTANCE_MIN;
+long _configFocalDistance = FOCAL_DISTANCE_MIN;     // FOCAL_DISTANCE_MIN;
 float _configDegreesLeft = ROTATION_DEGREES_AHEAD;  // ROTATION_DEGREES_AHEAD;
 float _configDegreesRight = ROTATION_DEGREES_AHEAD; // ROTATION_DEGREES_AHEAD;
 
@@ -323,7 +331,7 @@ void setState(MainState mainState)
     _inputTmpListIndexLast = -1;
     break;
   case MainState::MENU_SMOOTHING:
-    _inputTmpListIndex = _configSmoothing; // OFF => 0, SHORT => 1, MEDIUM => 2, LONG => 3
+    _inputTmpListIndex = _configSmoothing; // 0 => OFF, 1 => MINIMUM, 2 => SHORT, 3 => MEDIUM, 4 => LONG, 5 => MAXIMUM
     _inputTmpListIndexLast = -1;
     break;
   case MainState::MENU_ROTATION:
@@ -357,6 +365,7 @@ void setState(MainState mainState)
 // MAIN: STATE: MOVE
 //---------------------------------------------------
 
+// duration in seconds
 void moveSetup(Position positionTarget, long degreesSlide, float degreesLeft, float degreesRight, long duration, Smoothing smoothing, bool bounceMode, MainState nextState, MainState backState)
 {
   _positionTarget = positionTarget;
@@ -376,22 +385,42 @@ void moveSetup(Position positionTarget, long degreesSlide, float degreesLeft, fl
     _positionCurrent = (_positionCurrent == Position::LEFT) ? Position::ROTATION_LEFT : Position::ROTATION_RIGHT;
   }
 
-  _duration = duration;
+  _duration = duration * 1000; // convert to milliseconds
+  Serial.print("moveSetup | d=");
+  Serial.println(_duration);
+  if (_duration >= DURATION_CORRECTION_RANGE_MIN && _duration <= DURATION_CORRECTION_RANGE_MAX)
+  {
+    float ratio = 1.0 - ((float)_duration / (float)DURATION_CORRECTION_RANGE_MAX);
+    long factor = (DURATION_CORRECTION * ratio);
+    _duration -= factor;
+    Serial.print("^ r=");
+    Serial.print(ratio);
+    Serial.print(", f=");
+    Serial.print(factor);
+    Serial.print(", d=");
+    Serial.println(_duration);
+  }
 
   _smoothingMode = (smoothing == Smoothing::OFF) ? BasicStepperDriver::Mode::CONSTANT_SPEED : BasicStepperDriver::Mode::LINEAR_SPEED;
   switch (smoothing)
   {
   case Smoothing::OFF:
-    _smoothingValue = 0;
+    _smoothingValue = 10000;
+    break;
+  case Smoothing::MINIMUM:
+    _smoothingValue = 256;
     break;
   case Smoothing::SHORT:
-    _smoothingValue = 1000;
+    _smoothingValue = 128;
     break;
   case Smoothing::MEDIUM:
-    _smoothingValue = 2000;
+    _smoothingValue = 32;
     break;
   case Smoothing::LONG:
-    _smoothingValue = 3000;
+    _smoothingValue = 8;
+    break;
+  case Smoothing::MAXIMUM:
+    _smoothingValue = 1;
     break;
   }
 
@@ -399,13 +428,13 @@ void moveSetup(Position positionTarget, long degreesSlide, float degreesLeft, fl
   _nextState = nextState;
   _backState = backState;
 
-  // Serial.print("moveSetup | positionTarget=");
+  // Serial.print("moveSetup | posT=");
   // Serial.print(_positionTarget);
-  // Serial.print(", _moveDegreesSlide=");
+  // Serial.print(", degSli=");
   // Serial.print(_moveDegreesSlide);
-  // Serial.print(", _moveDegreesRotate=");
+  // Serial.print(", degRot=");
   // Serial.print(_moveDegreesRotate);
-  // Serial.print(" | _positionCurrent=");
+  // Serial.print(" | posCur=");
   // Serial.println(_positionCurrent);
 }
 
@@ -449,7 +478,7 @@ void moveStart()
     case Position::UNKNOWN:
       Serial.println("moveStart | calibrating");
       lcdPrint(str_Calibrating, str_PleaseWait);
-      moveMotorStart(false, MOTOR_SLIDE_DEGREES_MOVE_CALIBRATING, 0, 1, BasicStepperDriver::Mode::CONSTANT_SPEED, 1);
+      moveMotorStart(false, MOTOR_SLIDE_DEGREES_MOVE_CALIBRATING, 0, DURATION_CALIBRATING, BasicStepperDriver::Mode::CONSTANT_SPEED, 1);
       break;
     }
   }
@@ -457,17 +486,17 @@ void moveStart()
 
 void moveStop(MainState state)
 {
-  Serial.println("moveStop");
+  // Serial.println("moveStop");
   motorSlide.stop();
   motorRotate.stop();
   motorSyncDriver.disable();
   setState(state);
 }
 
-// time: in seconds
+// time: in milliseconds
 void moveMotorStart(bool directionToRight, long degreesSlide, float degreesRotate, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue)
 {
-  time = time * 1000000;
+  time = time * 1000; // convert to microseconds
   long motorSlideSteps = 0;
   long motorRotateSteps = 0;
   if (degreesSlide != 0)
@@ -487,9 +516,11 @@ void moveMotorStart(bool directionToRight, long degreesSlide, float degreesRotat
 
 void moveLoop()
 {
-  if (motorSyncDriver.nextAction())
+  unsigned long nextAction = motorSyncDriver.nextAction();
+  if (nextAction)
   {
-    if (motorSlide.getDirection() == 1) //getDirection --> Get movement direction: forward +1, back -1
+    // Serial.println(nextAction);
+    if (motorSlide.getCurrentState() != Motor::STOPPED && motorSlide.getDirection() == 1) //getDirection --> Get movement direction: forward +1, back -1
     {
       if (digitalRead(PIN_SWITCH) == HIGH)
       {
@@ -540,7 +571,7 @@ void menuMainLoop()
       setState(MainState::MENU_ROTATION);
       break;
     case 4:
-      moveSetup(Position::LEFT, MOTOR_SLIDE_DEGREES_MOVE_CALIBRATING, _configDegreesLeft, _configDegreesRight, 1, Smoothing::OFF, false, MainState::MENU_START, MainState::MENU_MAIN);
+      moveSetup(Position::LEFT, MOTOR_SLIDE_DEGREES_MOVE, _configDegreesLeft, _configDegreesRight, 1, Smoothing::OFF, false, MainState::MENU_START, MainState::MENU_MAIN);
       setState(MainState::MOVE);
       break;
     }
@@ -584,7 +615,7 @@ void menuSmoothingLoop()
   switch (inputAction)
   {
   case (InputAction::ACCEPT):
-    _configSmoothing = _inputTmpListIndex; // 0 => OFF, 1 => SHORT, 2 => MEDIUM, 3 => LONG
+    _configSmoothing = _inputTmpListIndex; // 0 => OFF, 1 => MINIMUM, 2 => SHORT, 3 => MEDIUM, 4 => LONG, 5 => MAXIMUM
     setState(MainState::MENU_MAIN);
     break;
   case (InputAction::CANCEL):
