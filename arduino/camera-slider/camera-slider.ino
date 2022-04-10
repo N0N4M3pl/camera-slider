@@ -1,5 +1,5 @@
 #include <DRV8825.h>
-#include <SyncDriver.h>
+#include <MultiDriver.h>
 #include <LCD_I2C.h>
 #include <Keypad.h>
 // #include <arduino.h>
@@ -69,15 +69,15 @@ LCD_I2C lcd(LCD_ADDRESS);
 // Motor steps per revolution. Most steppers are 200 steps or 1.8 degrees/step
 #define MOTOR_STEPS 200
 
-const int MOTOR_MICROSTEPS PROGMEM = 16;     //32;
-const int MOTOR_RPM_MAX PROGMEM = 120;       //600;
+const short MOTOR_MICROSTEPS PROGMEM = 32;     //32;
+const float MOTOR_RPM_MAX PROGMEM = 120;       //200 (1-200 is a reasonable range)
 const int MOTOR_SLIDE_DISTANCE PROGMEM = 84; //84;
-const int MOTOR_SLIDE_DISTANCE_HALF PROGMEM = MOTOR_SLIDE_DISTANCE / 2;
+const int MOTOR_SLIDE_DISTANCE_HALF PROGMEM = MOTOR_SLIDE_DISTANCE / 2; // center
 const int MOTOR_SLIDE_DISTANCE_HALF_PWR PROGMEM = MOTOR_SLIDE_DISTANCE_HALF * MOTOR_SLIDE_DISTANCE_HALF;
 const int MOTOR_SLIDE_DISTANCE_IN_ONE_ROTATION PROGMEM = 4;
 const int MOTOR_SLIDE_ROTATIONS PROGMEM = MOTOR_SLIDE_DISTANCE / MOTOR_SLIDE_DISTANCE_IN_ONE_ROTATION;
-const long MOTOR_SLIDE_DEGREES_MOVE PROGMEM = (MOTOR_SLIDE_ROTATIONS * 360);
-const long MOTOR_SLIDE_DEGREES_MOVE_CALIBRATING PROGMEM = MOTOR_SLIDE_DEGREES_MOVE + 90;
+const float MOTOR_SLIDE_DEGREES_MOVE PROGMEM = (MOTOR_SLIDE_ROTATIONS * 360);
+const float MOTOR_SLIDE_DEGREES_MOVE_CALIBRATING PROGMEM = MOTOR_SLIDE_DEGREES_MOVE + 90;
 
 // https://github.com/laurb9/StepperDriver/blob/master/src/BasicStepperDriver.cpp
 // https://github.com/laurb9/StepperDriver/blob/master/src/BasicStepperDriver.h
@@ -89,9 +89,10 @@ DRV8825 motorRotate(MOTOR_STEPS, PIN_MOTOR_ROTATE_DIR, PIN_MOTOR_ROTATE_STEP, PI
 
 // https://github.com/laurb9/StepperDriver/blob/master/src/SyncDriver.cpp
 // https://github.com/laurb9/StepperDriver/blob/master/src/SyncDriver.h
+// SyncDriver motorSyncDriver(motorSlide, motorRotate);
 // https://github.com/laurb9/StepperDriver/blob/master/src/MultiDriver.cpp
 // https://github.com/laurb9/StepperDriver/blob/master/src/MultiDriver.h
-SyncDriver motorSyncDriver(motorSlide, motorRotate);
+MultiDriver motorMultiDriver(motorSlide, motorRotate);
 
 //---------------------------------------------------
 // STRINGS
@@ -149,9 +150,9 @@ const char *strList_RotationMode[strListSize_RotationMode] = {str_Separately, st
 // MAIN
 //---------------------------------------------------
 
-const long DURATION_MIN PROGMEM = 16;                       // 16 sec, in seconds
+const long DURATION_MIN PROGMEM = 1;                       // 16 sec, in seconds
 const long DURATION_MAX PROGMEM = 86400;                    // 1 day, in seconds
-const long DURATION_CORRECTION_RANGE_MIN PROGMEM = 16000;   // 16 sec, in milliseconds
+const long DURATION_CORRECTION_RANGE_MIN PROGMEM = DURATION_MIN * 1000;   // 16 sec, in milliseconds
 const long DURATION_CORRECTION_RANGE_MAX PROGMEM = 3600000; // 1 hour, in milliseconds
 const long DURATION_CORRECTION PROGMEM = 5300;              // 5.3 sec, in milliseconds
 const long DURATION_CALIBRATING PROGMEM = 10625;            // minimal time from logs, in seconds
@@ -214,16 +215,16 @@ MainState _nextState;
 MainState _backState;
 
 bool _moveDirectionToRight;
-long _moveDegreesSlide = 0;
+float _moveDegreesSlide = 0;
 float _moveDegreesRotate = 0;
 
-long _configDuration = 60;                          // 60;
+long _configDuration = 16;                          // 60;
 bool _configBounceMode = false;                     // false;
-Smoothing _configSmoothing = Smoothing::MINIMUM;    // MINIMUM;
+Smoothing _configSmoothing = Smoothing::OFF;    // MINIMUM;
 bool _configRotationByFocalDistance = true;         // true;
 long _configFocalDistance = FOCAL_DISTANCE_MIN;     // FOCAL_DISTANCE_MIN;
-float _configDegreesLeft = ROTATION_DEGREES_AHEAD;  // ROTATION_DEGREES_AHEAD;
-float _configDegreesRight = ROTATION_DEGREES_AHEAD; // ROTATION_DEGREES_AHEAD;
+float _configDegreesLeft = 90;  // ROTATION_DEGREES_AHEAD;
+float _configDegreesRight = 270; // ROTATION_DEGREES_AHEAD;
 
 int _inputMenuMainListIndex = 0;
 int _inputMenuRotationListIndex = 0;
@@ -239,6 +240,9 @@ float _inputTmpValueFloatLast = 0;
 char _lcdLineA[17];
 char _lcdLineB[17];
 char _lcdValue[17];
+
+bool _debugMSStop = false;
+bool _debugMRStop = false;
 
 //---------------------------------------------------
 // MAIN
@@ -366,7 +370,7 @@ void setState(MainState mainState)
 //---------------------------------------------------
 
 // duration in seconds
-void moveSetup(Position positionTarget, long degreesSlide, float degreesLeft, float degreesRight, long duration, Smoothing smoothing, bool bounceMode, MainState nextState, MainState backState)
+void moveSetup(Position positionTarget, float degreesSlide, float degreesLeft, float degreesRight, long duration, Smoothing smoothing, bool bounceMode, MainState nextState, MainState backState)
 {
   _positionTarget = positionTarget;
   _moveDegreesSlide = degreesSlide;
@@ -385,21 +389,22 @@ void moveSetup(Position positionTarget, long degreesSlide, float degreesLeft, fl
     _positionCurrent = (_positionCurrent == Position::LEFT) ? Position::ROTATION_LEFT : Position::ROTATION_RIGHT;
   }
 
+  // TODO duration as float without converting to milliseconds or miniseconds
   _duration = duration * 1000; // convert to milliseconds
   Serial.print("moveSetup | d=");
   Serial.println(_duration);
-  if (_duration >= DURATION_CORRECTION_RANGE_MIN && _duration <= DURATION_CORRECTION_RANGE_MAX)
-  {
-    float ratio = 1.0 - ((float)_duration / (float)DURATION_CORRECTION_RANGE_MAX);
-    long factor = (DURATION_CORRECTION * ratio);
-    _duration -= factor;
-    Serial.print("^ r=");
-    Serial.print(ratio);
-    Serial.print(", f=");
-    Serial.print(factor);
-    Serial.print(", d=");
-    Serial.println(_duration);
-  }
+  // if (_duration >= DURATION_CORRECTION_RANGE_MIN && _duration <= DURATION_CORRECTION_RANGE_MAX)
+  // {
+  //   float ratio = 1.0 - ((float)_duration / (float)DURATION_CORRECTION_RANGE_MAX);
+  //   long factor = (DURATION_CORRECTION * ratio);
+  //   // _duration -= factor;
+  //   Serial.print("^ r=");
+  //   Serial.print(ratio);
+  //   Serial.print(", f=");
+  //   Serial.print(factor);
+  //   Serial.print(", d=");
+  //   Serial.println(_duration);
+  // }
 
   _smoothingMode = (smoothing == Smoothing::OFF) ? BasicStepperDriver::Mode::CONSTANT_SPEED : BasicStepperDriver::Mode::LINEAR_SPEED;
   switch (smoothing)
@@ -489,7 +494,7 @@ void moveStop(MainState state)
   // Serial.println("moveStop");
   motorSlide.stop();
   motorRotate.stop();
-  motorSyncDriver.disable();
+  motorMultiDriver.disable();
   setState(state);
 }
 
@@ -497,29 +502,146 @@ void moveStop(MainState state)
 void moveMotorStart(bool directionToRight, long degreesSlide, float degreesRotate, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue)
 {
   time = time * 1000; // convert to microseconds
+  float timeSlideRatio = 1.0;
+  long timeSlide =  time * timeSlideRatio;
+  float timeRotateRatio = 1.0;
+  long timeRotate =  time * timeRotateRatio;
+  
   long motorSlideSteps = 0;
+  long motorSlideTime = 0;
   long motorRotateSteps = 0;
+  long motorRotateTime = 0;
   if (degreesSlide != 0)
   {
     motorSlide.enable();
-    motorSlideSteps = motorSlideCalcSteps(directionToRight, degreesSlide, time, smoothingMode, smoothingValue);
-    time = max(time, motorSlide.getTimeForMove(motorSlideSteps));
+    motorSlideSteps = motorSlideCalcSteps(directionToRight, degreesSlide, timeSlide, smoothingMode, smoothingValue);
+    motorSlideTime = abs(motorSlide.getTimeForMove(motorSlideSteps));
   }
   if (degreesRotate != 0)
   {
     motorRotate.enable();
-    motorRotateSteps = motorRotateCalcSteps(degreesRotate, time, smoothingMode, smoothingValue);
+    motorRotateSteps = motorRotateCalcSteps(degreesRotate, timeRotate, smoothingMode, smoothingValue);
+    motorRotateTime = abs(motorRotate.getTimeForMove(motorRotateSteps));
   }
+
+  Serial.print("mMStart | t=");
+  Serial.print(time);
+  Serial.print(", tSr=");
+  Serial.print(timeSlideRatio);
+  Serial.print(", tS=");
+  Serial.print(timeSlide);
+  Serial.print(", tRr=");
+  Serial.print(timeRotateRatio);
+  Serial.print(", tR=");
+  Serial.print(timeRotate);
+  // Serial.print(", mSSteps=");
+  // Serial.print(motorSlideSteps);
+  Serial.print(", mSTime=");
+  Serial.print(motorSlideTime);
+  // Serial.print(", mRSteps=");
+  // Serial.print(motorRotateSteps);
+  Serial.print(", mRTime=");
+  Serial.println(motorRotateTime);
+
+  _debugMSStop = false;
+  _debugMRStop = false;
+  Serial.print("START ");
+  Serial.println(micros());
+
   _positionCurrent = Position::UNKNOWN;
-  motorSyncDriver.startMove(motorSlideSteps, motorRotateSteps);
+  motorMultiDriver.startMove(motorSlideSteps, motorRotateSteps);
+}
+
+// time: in microseconds
+// There are 1,000 microseconds in a millisecond and 1,000,000 microseconds in a second.
+long motorSlideCalcSteps(bool directionToRight, long degrees, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue) //, short microsteps)
+{
+  // degrees = min(degrees, MOTOR_SLIDE_DEGREES_MAX);
+
+  if (directionToRight)
+  {
+    degrees *= -1;
+  }
+
+  float rotations = degrees / 360.0;
+  float rpm = abs(rotations) / float(time / 1000000.0 / 60.0);
+  float rpmNorm = min(rpm, MOTOR_RPM_MAX);
+
+  // motorSlide.setMicrostep(microsteps);
+  motorSlide.setRPM(rpmNorm);
+  motorSlide.setSpeedProfile(smoothingMode, smoothingValue, smoothingValue);
+  long steps = motorSlide.calcStepsForRotation(degrees); // Calculate steps needed to rotate requested angle, given in degrees
+
+  long timeBySteps = motorSlide.getTimeForMove(steps);
+
+  // Serial.print("mSliCalcSteps | deg=");
+  // Serial.print(degrees);
+  // Serial.print(", t=");
+  // Serial.print(time);
+  // Serial.print(", rot=");
+  // Serial.print(rotations);
+  // Serial.print(", rpm=");
+  // Serial.print(rpm);
+  // Serial.print(", rpmN=");
+  // Serial.print(rpmNorm);
+  // Serial.print(", st=");
+  // Serial.print(steps);
+  // Serial.print(", tBySt=");
+  // Serial.println(timeBySteps);
+
+  return steps;
+}
+
+// time: in microseconds
+// There are 1,000 microseconds in a millisecond and 1,000,000 microseconds in a second.
+long motorRotateCalcSteps(float degrees, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue) //, short microsteps)
+{
+  degrees = (degrees * 3.0);
+
+  float rotations = degrees / 360.0;
+  float rpm = abs(rotations) / float(time / 1000000.0 / 60.0);
+  float rpmNorm = min(rpm, MOTOR_RPM_MAX);
+
+  // motorRotate.setMicrostep(microsteps);
+  motorRotate.setRPM(rpmNorm);
+  motorRotate.setSpeedProfile(smoothingMode, smoothingValue, smoothingValue);
+  long steps = motorRotate.calcStepsForRotation(degrees); // Calculate steps needed to rotate requested angle, given in degrees
+
+  long timeBySteps = motorRotate.getTimeForMove(steps);
+
+  // Serial.print("mRotCalcSteps | deg=");
+  // Serial.print(degrees);
+  // Serial.print(", t=");
+  // Serial.print(time);
+  // Serial.print(", rot=");
+  // Serial.print(rotations);
+  // Serial.print(", rpm=");
+  // Serial.print(rpm);
+  // Serial.print(", rpmN=");
+  // Serial.print(rpmNorm);
+  // Serial.print(", st=");
+  // Serial.print(steps);
+  // Serial.print(", tBySt=");
+  // Serial.println(timeBySteps);
+
+  return steps;
 }
 
 void moveLoop()
 {
-  unsigned long nextAction = motorSyncDriver.nextAction();
+  unsigned long nextAction = motorMultiDriver.nextAction();
   if (nextAction)
   {
-    // Serial.println(nextAction);
+    if (!_debugMSStop && motorSlide.getCurrentState() == Motor::STOPPED) {
+      _debugMSStop = true;
+      Serial.print("STOP S ");
+      Serial.println(micros());
+    }
+    if (!_debugMRStop && motorRotate.getCurrentState() == Motor::STOPPED) {
+      _debugMRStop = true;
+      Serial.print("STOP R ");
+      Serial.println(micros());
+    }
     if (motorSlide.getCurrentState() != Motor::STOPPED && motorSlide.getDirection() == 1) //getDirection --> Get movement direction: forward +1, back -1
     {
       if (digitalRead(PIN_SWITCH) == HIGH)
@@ -774,83 +896,6 @@ void menuStartLoop()
 
 //---------------------------------------------------
 // MAIN: HELPERS
-//---------------------------------------------------
-
-// time: in microseconds
-// There are 1,000 microseconds in a millisecond and 1,000,000 microseconds in a second.
-long motorSlideCalcSteps(bool directionToRight, long degrees, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue) //, short microsteps)
-{
-  // degrees = min(degrees, MOTOR_SLIDE_DEGREES_MAX);
-
-  if (directionToRight)
-  {
-    degrees *= -1;
-  }
-
-  float rotations = degrees / 360.0;
-  float rpm = abs(rotations) / float(time / 1000000.0 / 60.0);
-  float rpmNorm = min(rpm, float(MOTOR_RPM_MAX));
-
-  // motorSlide.setMicrostep(microsteps);
-  motorSlide.setRPM(rpmNorm);
-  motorSlide.setSpeedProfile(smoothingMode, smoothingValue, smoothingValue);
-  long steps = motorSlide.calcStepsForRotation(degrees); // Calculate steps needed to rotate requested angle, given in degrees
-
-  long timeBySteps = max(time, motorSlide.getTimeForMove(steps));
-
-  Serial.print("mSliCalcSteps | deg=");
-  Serial.print(degrees);
-  Serial.print(", t=");
-  Serial.print(time);
-  // Serial.print(", rot=");
-  // Serial.print(rotations);
-  // Serial.print(", rpm=");
-  // Serial.print(rpm);
-  // Serial.print(", rpmN=");
-  // Serial.print(rpmNorm);
-  // Serial.print(", st=");
-  // Serial.print(steps);
-  Serial.print(", tBySt=");
-  Serial.println(timeBySteps);
-
-  return steps;
-}
-
-// time: in microseconds
-// There are 1,000 microseconds in a millisecond and 1,000,000 microseconds in a second.
-long motorRotateCalcSteps(float degrees, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue) //, short microsteps)
-{
-  degrees = degrees * 3.0;
-
-  float rotations = degrees / 360.0;
-  float rpm = abs(rotations) / float(time / 1000000.0 / 60.0);
-  float rpmNorm = min(rpm, float(MOTOR_RPM_MAX));
-
-  // motorRotate.setMicrostep(microsteps);
-  motorRotate.setRPM(rpmNorm);
-  motorRotate.setSpeedProfile(smoothingMode, smoothingValue, smoothingValue);
-  long steps = motorRotate.calcStepsForRotation(degrees); // Calculate steps needed to rotate requested angle, given in degrees
-
-  long timeBySteps = max(time, motorRotate.getTimeForMove(steps));
-
-  Serial.print("mRotCalcSteps | degrees=");
-  Serial.print(degrees);
-  Serial.print(", t=");
-  Serial.print(time);
-  // Serial.print(", rot=");
-  // Serial.print(rotations);
-  // Serial.print(", rpm=");
-  // Serial.print(rpm);
-  // Serial.print(", rpmN=");
-  // Serial.print(rpmNorm);
-  // Serial.print(", st=");
-  // Serial.print(steps);
-  Serial.print(", tBySt=");
-  Serial.println(timeBySteps);
-
-  return steps;
-}
-
 //---------------------------------------------------
 
 void lcdClear()
