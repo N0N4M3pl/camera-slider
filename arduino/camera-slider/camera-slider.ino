@@ -69,9 +69,9 @@ LCD_I2C lcd(LCD_ADDRESS);
 // Motor steps per revolution. Most steppers are 200 steps or 1.8 degrees/step
 #define MOTOR_STEPS 200
 
-const short MOTOR_MICROSTEPS PROGMEM = 32;     //32;
-const float MOTOR_RPM_MAX PROGMEM = 120;       //200 (1-200 is a reasonable range)
-const int MOTOR_SLIDE_DISTANCE PROGMEM = 84; //84;
+const short MOTOR_MICROSTEPS PROGMEM = 16;                              // 16;
+const float MOTOR_RPM_MAX PROGMEM = 200;                                // 200 (1-200 is a reasonable range)
+const int MOTOR_SLIDE_DISTANCE PROGMEM = 84;                            // 84;
 const int MOTOR_SLIDE_DISTANCE_HALF PROGMEM = MOTOR_SLIDE_DISTANCE / 2; // center
 const int MOTOR_SLIDE_DISTANCE_HALF_PWR PROGMEM = MOTOR_SLIDE_DISTANCE_HALF * MOTOR_SLIDE_DISTANCE_HALF;
 const int MOTOR_SLIDE_DISTANCE_IN_ONE_ROTATION PROGMEM = 4;
@@ -150,14 +150,13 @@ const char *strList_RotationMode[strListSize_RotationMode] = {str_Separately, st
 // MAIN
 //---------------------------------------------------
 
-const long DURATION_MIN PROGMEM = 1;                       // 16 sec, in seconds
-const long DURATION_MAX PROGMEM = 86400;                    // 1 day, in seconds
-const long DURATION_CORRECTION_RANGE_MIN PROGMEM = DURATION_MIN * 1000;   // 16 sec, in milliseconds
-const long DURATION_CORRECTION_RANGE_MAX PROGMEM = 3600000; // 1 hour, in milliseconds
-const long DURATION_CORRECTION PROGMEM = 5300;              // 5.3 sec, in milliseconds
-const long DURATION_CALIBRATING PROGMEM = 10625;            // minimal time from logs, in seconds
-const long FOCAL_DISTANCE_MIN PROGMEM = 10;                 // 10 cm
-const long FOCAL_DISTANCE_MAX PROGMEM = 10000;              // 100 m
+// max float 4294967040.0
+
+const float DURATION_MIN PROGMEM = 15;            // 15 sec, in seconds
+const float DURATION_MAX PROGMEM = 86400;         // 1 day, in seconds
+const float TIME_CALIBRATING PROGMEM = 10625;     // minimal time from logs, in seconds
+const float FOCAL_DISTANCE_MIN PROGMEM = 10;      // 10 cm
+const float FOCAL_DISTANCE_MAX PROGMEM = 10000;   // 100 m
 const float ROTATION_DEGREES_MIN PROGMEM = 0;
 const float ROTATION_DEGREES_MAX PROGMEM = 360;
 const float ROTATION_DEGREES_AHEAD PROGMEM = 180;
@@ -208,7 +207,7 @@ Position _positionCurrent = UNKNOWN;
 Position _positionTarget = UNKNOWN;
 
 bool _bounceMode;
-long _duration;
+float _time;
 BasicStepperDriver::Mode _smoothingMode = BasicStepperDriver::Mode::CONSTANT_SPEED;
 short _smoothingValue = 1;
 MainState _nextState;
@@ -218,22 +217,18 @@ bool _moveDirectionToRight;
 float _moveDegreesSlide = 0;
 float _moveDegreesRotate = 0;
 
-long _configDuration = 16;                          // 60;
-bool _configBounceMode = false;                     // false;
-Smoothing _configSmoothing = Smoothing::OFF;    // MINIMUM;
-bool _configRotationByFocalDistance = true;         // true;
-long _configFocalDistance = FOCAL_DISTANCE_MIN;     // FOCAL_DISTANCE_MIN;
-float _configDegreesLeft = 90;  // ROTATION_DEGREES_AHEAD;
-float _configDegreesRight = 270; // ROTATION_DEGREES_AHEAD;
+float _configDuration = 15;                            // 60;
+bool _configBounceMode = false;                       // false;
+Smoothing _configSmoothing = Smoothing::OFF;          // MINIMUM;
+bool _configRotationByFocalDistance = true;           // true;
+float _configFocalDistance = FOCAL_DISTANCE_MIN;      // FOCAL_DISTANCE_MIN;
+float _configDegreesLeft = 90;                        // ROTATION_DEGREES_AHEAD;
+float _configDegreesRight = 270;                      // ROTATION_DEGREES_AHEAD;
 
 int _inputMenuMainListIndex = 0;
 int _inputMenuRotationListIndex = 0;
 int _inputTmpListIndex = 0;
 int _inputTmpListIndexLast = 0;
-int _inputTmpValueInt = 0;
-int _inputTmpValueIntLast = 0;
-long _inputTmpValueLong = 0;
-long _inputTmpValueLongLast = 0;
 float _inputTmpValueFloat = 0;
 float _inputTmpValueFloatLast = 0;
 
@@ -241,8 +236,8 @@ char _lcdLineA[17];
 char _lcdLineB[17];
 char _lcdValue[17];
 
-bool _debugMSStop = false;
-bool _debugMRStop = false;
+BasicStepperDriver::State _debugLastStateMS = Motor::STOPPED;
+BasicStepperDriver::State _debugLastStateMR = Motor::STOPPED;
 
 //---------------------------------------------------
 // MAIN
@@ -327,8 +322,8 @@ void setState(MainState mainState)
     _inputMenuRotationListIndex = 0;
     break;
   case MainState::MENU_DURATION:
-    _inputTmpValueInt = -1;
-    _inputTmpValueIntLast = -1;
+    _inputTmpValueFloat = -1;
+    _inputTmpValueFloatLast = -1;
     break;
   case MainState::MENU_BOUNCE_MODE:
     _inputTmpListIndex = _configBounceMode; // false => 0, true => 1
@@ -346,14 +341,10 @@ void setState(MainState mainState)
     _inputTmpListIndexLast = -1;
     break;
   case MainState::MENU_ROTATION_DEGREES_LEFT:
-    _inputTmpValueLong = -1;
-    _inputTmpValueLongLast = -1;
     _inputTmpValueFloat = -1;
     _inputTmpValueFloatLast = -1;
     break;
   case MainState::MENU_ROTATION_DEGREES_RIGHT:
-    _inputTmpValueLong = -1;
-    _inputTmpValueLongLast = -1;
     _inputTmpValueFloat = -1;
     _inputTmpValueFloatLast = -1;
     break;
@@ -370,7 +361,7 @@ void setState(MainState mainState)
 //---------------------------------------------------
 
 // duration in seconds
-void moveSetup(Position positionTarget, float degreesSlide, float degreesLeft, float degreesRight, long duration, Smoothing smoothing, bool bounceMode, MainState nextState, MainState backState)
+void moveSetup(Position positionTarget, float degreesSlide, float degreesLeft, float degreesRight, float duration, Smoothing smoothing, bool bounceMode, MainState nextState, MainState backState)
 {
   _positionTarget = positionTarget;
   _moveDegreesSlide = degreesSlide;
@@ -389,31 +380,18 @@ void moveSetup(Position positionTarget, float degreesSlide, float degreesLeft, f
     _positionCurrent = (_positionCurrent == Position::LEFT) ? Position::ROTATION_LEFT : Position::ROTATION_RIGHT;
   }
 
-  // TODO duration as float without converting to milliseconds or miniseconds
-  _duration = duration * 1000; // convert to milliseconds
-  Serial.print("moveSetup | d=");
-  Serial.println(_duration);
-  // if (_duration >= DURATION_CORRECTION_RANGE_MIN && _duration <= DURATION_CORRECTION_RANGE_MAX)
-  // {
-  //   float ratio = 1.0 - ((float)_duration / (float)DURATION_CORRECTION_RANGE_MAX);
-  //   long factor = (DURATION_CORRECTION * ratio);
-  //   // _duration -= factor;
-  //   Serial.print("^ r=");
-  //   Serial.print(ratio);
-  //   Serial.print(", f=");
-  //   Serial.print(factor);
-  //   Serial.print(", d=");
-  //   Serial.println(_duration);
-  // }
+  // duration is in seconds 
+  // time is in milliseconds
+  _time = duration * 1000; // convert to milliseconds
 
   _smoothingMode = (smoothing == Smoothing::OFF) ? BasicStepperDriver::Mode::CONSTANT_SPEED : BasicStepperDriver::Mode::LINEAR_SPEED;
   switch (smoothing)
   {
   case Smoothing::OFF:
-    _smoothingValue = 10000;
+    _smoothingValue = 1000;
     break;
   case Smoothing::MINIMUM:
-    _smoothingValue = 256;
+    _smoothingValue = 512;
     break;
   case Smoothing::SHORT:
     _smoothingValue = 128;
@@ -425,7 +403,7 @@ void moveSetup(Position positionTarget, float degreesSlide, float degreesLeft, f
     _smoothingValue = 8;
     break;
   case Smoothing::MAXIMUM:
-    _smoothingValue = 1;
+    _smoothingValue = 2;
     break;
   }
 
@@ -437,6 +415,10 @@ void moveSetup(Position positionTarget, float degreesSlide, float degreesLeft, f
   // Serial.print(_positionTarget);
   // Serial.print(", degSli=");
   // Serial.print(_moveDegreesSlide);
+  // Serial.print(", degL=");
+  // Serial.print(degreesLeft);
+  // Serial.print(", degR=");
+  // Serial.print(degreesRight);
   // Serial.print(", degRot=");
   // Serial.print(_moveDegreesRotate);
   // Serial.print(" | posCur=");
@@ -459,7 +441,7 @@ void moveStart()
       _moveDirectionToRight = !_moveDirectionToRight;
       _moveDegreesRotate = _moveDegreesRotate * -1;
       lcdPrintMove(_moveDirectionToRight, _bounceMode);
-      moveMotorStart(_moveDirectionToRight, _moveDegreesSlide, _moveDegreesRotate, _duration, _smoothingMode, _smoothingValue);
+      moveMotorStart(_moveDirectionToRight, _moveDegreesSlide, _moveDegreesRotate, _time, _smoothingMode, _smoothingValue);
     }
     else
     {
@@ -478,12 +460,12 @@ void moveStart()
       Serial.println("moveStart | start");
       _moveDirectionToRight = (_positionCurrent == Position::LEFT || _positionCurrent == Position::ROTATION_LEFT);
       lcdPrintMove(_moveDirectionToRight, _bounceMode);
-      moveMotorStart(_moveDirectionToRight, _moveDegreesSlide, _moveDegreesRotate, _duration, _smoothingMode, _smoothingValue);
+      moveMotorStart(_moveDirectionToRight, _moveDegreesSlide, _moveDegreesRotate, _time, _smoothingMode, _smoothingValue);
       break;
     case Position::UNKNOWN:
       Serial.println("moveStart | calibrating");
       lcdPrint(str_Calibrating, str_PleaseWait);
-      moveMotorStart(false, MOTOR_SLIDE_DEGREES_MOVE_CALIBRATING, 0, DURATION_CALIBRATING, BasicStepperDriver::Mode::CONSTANT_SPEED, 1);
+      moveMotorStart(false, MOTOR_SLIDE_DEGREES_MOVE_CALIBRATING, 0, TIME_CALIBRATING, BasicStepperDriver::Mode::CONSTANT_SPEED, 1);
       break;
     }
   }
@@ -499,52 +481,33 @@ void moveStop(MainState state)
 }
 
 // time: in milliseconds
-void moveMotorStart(bool directionToRight, long degreesSlide, float degreesRotate, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue)
+void moveMotorStart(bool directionToRight, float degreesSlide, float degreesRotate, float time, BasicStepperDriver::Mode smoothingMode, short smoothingValue)
 {
-  time = time * 1000; // convert to microseconds
-  float timeSlideRatio = 1.0;
-  long timeSlide =  time * timeSlideRatio;
-  float timeRotateRatio = 1.0;
-  long timeRotate =  time * timeRotateRatio;
+  Serial.print("mMStart | dir=");
+  Serial.print(directionToRight);
+  // Serial.print(", degS=");
+  // Serial.print(degreesSlide);
+  // Serial.print(", degR=");
+  // Serial.print(degreesRotate);
+  Serial.print(", t=");
+  Serial.println(time);
   
   long motorSlideSteps = 0;
-  long motorSlideTime = 0;
   long motorRotateSteps = 0;
-  long motorRotateTime = 0;
   if (degreesSlide != 0)
   {
     motorSlide.enable();
-    motorSlideSteps = motorSlideCalcSteps(directionToRight, degreesSlide, timeSlide, smoothingMode, smoothingValue);
-    motorSlideTime = abs(motorSlide.getTimeForMove(motorSlideSteps));
+    motorSlideSteps = motorSlideCalcSteps(directionToRight, degreesSlide, time, smoothingMode, smoothingValue);
   }
   if (degreesRotate != 0)
   {
     motorRotate.enable();
-    motorRotateSteps = motorRotateCalcSteps(degreesRotate, timeRotate, smoothingMode, smoothingValue);
-    motorRotateTime = abs(motorRotate.getTimeForMove(motorRotateSteps));
+    motorRotateSteps = motorRotateCalcSteps(degreesRotate, time, smoothingMode, smoothingValue);
   }
 
-  Serial.print("mMStart | t=");
-  Serial.print(time);
-  Serial.print(", tSr=");
-  Serial.print(timeSlideRatio);
-  Serial.print(", tS=");
-  Serial.print(timeSlide);
-  Serial.print(", tRr=");
-  Serial.print(timeRotateRatio);
-  Serial.print(", tR=");
-  Serial.print(timeRotate);
-  // Serial.print(", mSSteps=");
-  // Serial.print(motorSlideSteps);
-  Serial.print(", mSTime=");
-  Serial.print(motorSlideTime);
-  // Serial.print(", mRSteps=");
-  // Serial.print(motorRotateSteps);
-  Serial.print(", mRTime=");
-  Serial.println(motorRotateTime);
+  _debugLastStateMS = Motor::STOPPED;
+  _debugLastStateMR = Motor::STOPPED;
 
-  _debugMSStop = false;
-  _debugMRStop = false;
   Serial.print("START ");
   Serial.println(micros());
 
@@ -554,7 +517,7 @@ void moveMotorStart(bool directionToRight, long degreesSlide, float degreesRotat
 
 // time: in microseconds
 // There are 1,000 microseconds in a millisecond and 1,000,000 microseconds in a second.
-long motorSlideCalcSteps(bool directionToRight, long degrees, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue) //, short microsteps)
+long motorSlideCalcSteps(bool directionToRight, float degrees, float time, BasicStepperDriver::Mode smoothingMode, short smoothingValue) //, short microsteps)
 {
   // degrees = min(degrees, MOTOR_SLIDE_DEGREES_MAX);
 
@@ -563,8 +526,12 @@ long motorSlideCalcSteps(bool directionToRight, long degrees, long time, BasicSt
     degrees *= -1;
   }
 
-  float rotations = degrees / 360.0;
-  float rpm = abs(rotations) / float(time / 1000000.0 / 60.0);
+  if (time >= DURATION_MIN * 1000) {
+    time = time - 3430;
+  }
+
+  float rotations = degrees / 360;
+  float rpm = abs(rotations) / (time / 1000 / 60);
   float rpmNorm = min(rpm, MOTOR_RPM_MAX);
 
   // motorSlide.setMicrostep(microsteps);
@@ -572,12 +539,12 @@ long motorSlideCalcSteps(bool directionToRight, long degrees, long time, BasicSt
   motorSlide.setSpeedProfile(smoothingMode, smoothingValue, smoothingValue);
   long steps = motorSlide.calcStepsForRotation(degrees); // Calculate steps needed to rotate requested angle, given in degrees
 
-  long timeBySteps = motorSlide.getTimeForMove(steps);
+  long timeBySteps = abs(motorSlide.getTimeForMove(steps));
 
-  // Serial.print("mSliCalcSteps | deg=");
-  // Serial.print(degrees);
-  // Serial.print(", t=");
-  // Serial.print(time);
+  Serial.print("mSCalcSteps | deg=");
+  Serial.print(degrees);
+  Serial.print(", t=");
+  Serial.print(time);
   // Serial.print(", rot=");
   // Serial.print(rotations);
   // Serial.print(", rpm=");
@@ -586,20 +553,24 @@ long motorSlideCalcSteps(bool directionToRight, long degrees, long time, BasicSt
   // Serial.print(rpmNorm);
   // Serial.print(", st=");
   // Serial.print(steps);
-  // Serial.print(", tBySt=");
-  // Serial.println(timeBySteps);
+  Serial.print(", tBySt=");
+  Serial.println(timeBySteps);
 
   return steps;
 }
 
 // time: in microseconds
 // There are 1,000 microseconds in a millisecond and 1,000,000 microseconds in a second.
-long motorRotateCalcSteps(float degrees, long time, BasicStepperDriver::Mode smoothingMode, short smoothingValue) //, short microsteps)
+long motorRotateCalcSteps(float degrees, float time, BasicStepperDriver::Mode smoothingMode, short smoothingValue) //, short microsteps)
 {
-  degrees = (degrees * 3.0);
+  degrees = (degrees * 3);
 
-  float rotations = degrees / 360.0;
-  float rpm = abs(rotations) / float(time / 1000000.0 / 60.0);
+  if (time >= DURATION_MIN * 1000) {
+    time = time - 5126;
+  }
+
+  float rotations = degrees / 360;
+  float rpm = abs(rotations) / (time / 1000 / 60);
   float rpmNorm = min(rpm, MOTOR_RPM_MAX);
 
   // motorRotate.setMicrostep(microsteps);
@@ -607,12 +578,12 @@ long motorRotateCalcSteps(float degrees, long time, BasicStepperDriver::Mode smo
   motorRotate.setSpeedProfile(smoothingMode, smoothingValue, smoothingValue);
   long steps = motorRotate.calcStepsForRotation(degrees); // Calculate steps needed to rotate requested angle, given in degrees
 
-  long timeBySteps = motorRotate.getTimeForMove(steps);
+  long timeBySteps = abs(motorRotate.getTimeForMove(steps));
 
-  // Serial.print("mRotCalcSteps | deg=");
-  // Serial.print(degrees);
-  // Serial.print(", t=");
-  // Serial.print(time);
+  Serial.print("mRCalcSteps | deg=");
+  Serial.print(degrees);
+  Serial.print(", t=");
+  Serial.print(time);
   // Serial.print(", rot=");
   // Serial.print(rotations);
   // Serial.print(", rpm=");
@@ -621,8 +592,8 @@ long motorRotateCalcSteps(float degrees, long time, BasicStepperDriver::Mode smo
   // Serial.print(rpmNorm);
   // Serial.print(", st=");
   // Serial.print(steps);
-  // Serial.print(", tBySt=");
-  // Serial.println(timeBySteps);
+  Serial.print(", tBySt=");
+  Serial.println(timeBySteps);
 
   return steps;
 }
@@ -632,17 +603,23 @@ void moveLoop()
   unsigned long nextAction = motorMultiDriver.nextAction();
   if (nextAction)
   {
-    if (!_debugMSStop && motorSlide.getCurrentState() == Motor::STOPPED) {
-      _debugMSStop = true;
-      Serial.print("STOP S ");
+    BasicStepperDriver::State stateMS = motorSlide.getCurrentState();
+    if (stateMS != _debugLastStateMS) {
+      _debugLastStateMS = stateMS;
+      Serial.print("STATE SLI ");
+      Serial.print(stateMS);
+      Serial.print(' ');
       Serial.println(micros());
     }
-    if (!_debugMRStop && motorRotate.getCurrentState() == Motor::STOPPED) {
-      _debugMRStop = true;
-      Serial.print("STOP R ");
+    BasicStepperDriver::State stateMR = motorRotate.getCurrentState();
+    if (stateMR != _debugLastStateMR) {
+      _debugLastStateMR = stateMR;
+      Serial.print("STATE ROT ");
+      Serial.print(stateMR);
+      Serial.print(' ');
       Serial.println(micros());
     }
-    if (motorSlide.getCurrentState() != Motor::STOPPED && motorSlide.getDirection() == 1) //getDirection --> Get movement direction: forward +1, back -1
+    if (stateMS != Motor::STOPPED && motorSlide.getDirection() == 1) //getDirection --> Get movement direction: forward +1, back -1
     {
       if (digitalRead(PIN_SWITCH) == HIGH)
       {
@@ -702,12 +679,12 @@ void menuMainLoop()
 
 void menuDurationLoop()
 {
-  InputAction inputAction = inputValueInt(str_Duration, &_inputTmpValueInt, _configDuration, str_suffix_second);
+  InputAction inputAction = inputValueFloat(str_Duration, &_inputTmpValueFloat, _configDuration, str_suffix_second);
   switch (inputAction)
   {
   case (InputAction::ACCEPT):
-    _inputTmpValueInt = min(max(_inputTmpValueInt, DURATION_MIN), DURATION_MAX);
-    _configDuration = _inputTmpValueInt;
+    _inputTmpValueFloat = min(max(_inputTmpValueFloat, DURATION_MIN), DURATION_MAX);
+    _configDuration = _inputTmpValueFloat;
     setState(MainState::MENU_MAIN);
     break;
   case (InputAction::CANCEL):
@@ -793,7 +770,7 @@ void menuRotationDegreesLeftLoop()
   InputAction inputAction;
   if (_configRotationByFocalDistance)
   {
-    inputAction = inputValueLong(str_FocalDistance, &_inputTmpValueLong, _configFocalDistance, str_suffix_cm);
+    inputAction = inputValueFloat(str_FocalDistance, &_inputTmpValueFloat, _configFocalDistance, str_suffix_cm);
   }
   else
   {
@@ -806,8 +783,8 @@ void menuRotationDegreesLeftLoop()
     float degreesOld = _configDegreesLeft;
     if (_configRotationByFocalDistance)
     {
-      _inputTmpValueLong = min(max(_inputTmpValueLong, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
-      _configFocalDistance = _inputTmpValueLong;
+      _inputTmpValueFloat = min(max(_inputTmpValueFloat, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
+      _configFocalDistance = _inputTmpValueFloat;
       setDegreesLeftRightByFocalDistance(_configFocalDistance);
     }
     else
@@ -816,10 +793,10 @@ void menuRotationDegreesLeftLoop()
       _configDegreesLeft = _inputTmpValueFloat;
       _configFocalDistance = 0;
     }
-    Serial.print("menuRotationDegreesLeftLoop | degreesOld=");
-    Serial.print(degreesOld);
-    Serial.print(", _configDegreesLeft=");
-    Serial.println(_configDegreesLeft);
+    // Serial.print("menuRotationDegreesLeftLoop | degreesOld=");
+    // Serial.print(degreesOld);
+    // Serial.print(", _configDegreesLeft=");
+    // Serial.println(_configDegreesLeft);
     moveSetup(Position::LEFT, 0, _configDegreesLeft, degreesOld, 1, Smoothing::OFF, false, MainState::MENU_ROTATION_DEGREES_LEFT, MainState::MENU_ROTATION);
     setState(MainState::MOVE);
     break;
@@ -837,7 +814,7 @@ void menuRotationDegreesRightLoop()
   InputAction inputAction;
   if (_configRotationByFocalDistance)
   {
-    inputAction = inputValueLong(str_FocalDistance, &_inputTmpValueLong, _configFocalDistance, str_suffix_cm);
+    inputAction = inputValueFloat(str_FocalDistance, &_inputTmpValueFloat, _configFocalDistance, str_suffix_cm);
   }
   else
   {
@@ -850,8 +827,8 @@ void menuRotationDegreesRightLoop()
     float degreesOld = _configDegreesRight;
     if (_configRotationByFocalDistance)
     {
-      _inputTmpValueLong = min(max(_inputTmpValueLong, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
-      _configFocalDistance = _inputTmpValueLong;
+      _inputTmpValueFloat = min(max(_inputTmpValueFloat, FOCAL_DISTANCE_MIN), FOCAL_DISTANCE_MAX);
+      _configFocalDistance = _inputTmpValueFloat;
       setDegreesLeftRightByFocalDistance(_configFocalDistance);
     }
     else
@@ -860,10 +837,10 @@ void menuRotationDegreesRightLoop()
       _configDegreesRight = _inputTmpValueFloat;
       _configFocalDistance = 0;
     }
-    Serial.print("menuRotationDegreesRightLoop | degreesOld=");
-    Serial.print(degreesOld);
-    Serial.print(", _configDegreesRight=");
-    Serial.println(_configDegreesRight);
+    // Serial.print("menuRotationDegreesRightLoop | degreesOld=");
+    // Serial.print(degreesOld);
+    // Serial.print(", _configDegreesRight=");
+    // Serial.println(_configDegreesRight);
     moveSetup(Position::RIGHT, 0, degreesOld, _configDegreesRight, 1, Smoothing::OFF, false, MainState::MENU_ROTATION_DEGREES_RIGHT, MainState::MENU_ROTATION);
     setState(MainState::MOVE);
     break;
@@ -943,7 +920,7 @@ void lcdPrintInputListItem(char *header, char *listItem, int index)
   lcdPrint(_lcdLineA, _lcdLineB);
 }
 
-void lcdPrintInputValueLong(char *header, long value, char *suffix)
+void lcdPrintInputValue(char *header, long value, char *suffix)
 {
   strcpy(_lcdLineA, header);
   strcat(_lcdLineA, str_colon);
@@ -997,109 +974,111 @@ InputAction inputList(char *header, int listSize, char **list, int *index)
   return InputAction::NOTHING;
 }
 
-InputAction inputValueInt(char *header, int *value, int defaultValue, char *suffix)
-{
-  if (*value == -1)
-  {
-    if (_inputTmpValueIntLast != defaultValue)
-    {
-      _inputTmpValueIntLast = defaultValue;
-      lcdPrintInputValueLong(header, defaultValue, suffix);
-    }
-  }
-  else
-  {
-    if (_inputTmpValueIntLast != *value)
-    {
-      _inputTmpValueIntLast = *value;
-      lcdPrintInputValueLong(header, *value, suffix);
-    }
-  }
+// INFO int is not used
+// InputAction inputValueInt(char *header, int *value, int defaultValue, char *suffix)
+// {
+//   if (*value == -1)
+//   {
+//     if (_inputTmpValueIntLast != defaultValue)
+//     {
+//       _inputTmpValueIntLast = defaultValue;
+//       lcdPrintInputValue(header, defaultValue, suffix);
+//     }
+//   }
+//   else
+//   {
+//     if (_inputTmpValueIntLast != *value)
+//     {
+//       _inputTmpValueIntLast = *value;
+//       lcdPrintInputValue(header, *value, suffix);
+//     }
+//   }
 
-  char key = keypad.getKey();
-  if (key != NO_KEY)
-  {
-    switch (key)
-    {
-    case KEY_V:
-    {
-      if (*value == -1)
-      {
-        *value = defaultValue;
-      }
-      return InputAction::ACCEPT;
-    }
-    case KEY_X:
-      return InputAction::CANCEL;
-    default:
-    {
-      if (*value == -1)
-      {
-        *value = (key - 48);
-      }
-      else
-      {
-        *value = ((*value) * 10) + (key - 48);
-      }
-      break;
-    }
-    }
-  }
+//   char key = keypad.getKey();
+//   if (key != NO_KEY)
+//   {
+//     switch (key)
+//     {
+//     case KEY_V:
+//     {
+//       if (*value == -1)
+//       {
+//         *value = defaultValue;
+//       }
+//       return InputAction::ACCEPT;
+//     }
+//     case KEY_X:
+//       return InputAction::CANCEL;
+//     default:
+//     {
+//       if (*value == -1)
+//       {
+//         *value = (key - 48);
+//       }
+//       else
+//       {
+//         *value = ((*value) * 10) + (key - 48);
+//       }
+//       break;
+//     }
+//     }
+//   }
 
-  return InputAction::NOTHING;
-}
+//   return InputAction::NOTHING;
+// }
 
-InputAction inputValueLong(char *header, long *value, long defaultValue, char *suffix)
-{
-  if (*value == -1)
-  {
-    if (_inputTmpValueLongLast != defaultValue)
-    {
-      _inputTmpValueLongLast = defaultValue;
-      lcdPrintInputValueLong(header, defaultValue, suffix);
-    }
-  }
-  else
-  {
-    if (_inputTmpValueLongLast != *value)
-    {
-      _inputTmpValueLongLast = *value;
-      lcdPrintInputValueLong(header, *value, suffix);
-    }
-  }
+// INFO long is not used
+// InputAction inputValueLong(char *header, long *value, long defaultValue, char *suffix)
+// {
+//   if (*value == -1)
+//   {
+//     if (_inputTmpValueLongLast != defaultValue)
+//     {
+//       _inputTmpValueLongLast = defaultValue;
+//       lcdPrintInputValue(header, defaultValue, suffix);
+//     }
+//   }
+//   else
+//   {
+//     if (_inputTmpValueLongLast != *value)
+//     {
+//       _inputTmpValueLongLast = *value;
+//       lcdPrintInputValue(header, *value, suffix);
+//     }
+//   }
 
-  char key = keypad.getKey();
-  if (key != NO_KEY)
-  {
-    switch (key)
-    {
-    case KEY_V:
-    {
-      if (*value == -1)
-      {
-        *value = defaultValue;
-      }
-      return InputAction::ACCEPT;
-    }
-    case KEY_X:
-      return InputAction::CANCEL;
-    default:
-    {
-      if (*value == -1)
-      {
-        *value = (key - 48);
-      }
-      else
-      {
-        *value = ((*value) * 10) + (key - 48);
-      }
-      break;
-    }
-    }
-  }
+//   char key = keypad.getKey();
+//   if (key != NO_KEY)
+//   {
+//     switch (key)
+//     {
+//     case KEY_V:
+//     {
+//       if (*value == -1)
+//       {
+//         *value = defaultValue;
+//       }
+//       return InputAction::ACCEPT;
+//     }
+//     case KEY_X:
+//       return InputAction::CANCEL;
+//     default:
+//     {
+//       if (*value == -1)
+//       {
+//         *value = (key - 48);
+//       }
+//       else
+//       {
+//         *value = ((*value) * 10) + (key - 48);
+//       }
+//       break;
+//     }
+//     }
+//   }
 
-  return InputAction::NOTHING;
-}
+//   return InputAction::NOTHING;
+// }
 
 InputAction inputValueFloat(char *header, float *value, float defaultValue, char *suffix)
 {
@@ -1108,7 +1087,7 @@ InputAction inputValueFloat(char *header, float *value, float defaultValue, char
     if (_inputTmpValueFloatLast != defaultValue)
     {
       _inputTmpValueFloatLast = defaultValue;
-      lcdPrintInputValueLong(header, defaultValue, suffix);
+      lcdPrintInputValue(header, defaultValue, suffix);
     }
   }
   else
@@ -1116,7 +1095,7 @@ InputAction inputValueFloat(char *header, float *value, float defaultValue, char
     if (_inputTmpValueFloatLast != *value)
     {
       _inputTmpValueFloatLast = *value;
-      lcdPrintInputValueLong(header, *value, suffix);
+      lcdPrintInputValue(header, *value, suffix);
     }
   }
 
@@ -1174,11 +1153,11 @@ const A = Math.asin(sinA) * 180/Math.PI
 console.log('A=' + A);
 */
 
-void setDegreesLeftRightByFocalDistance(long focalDistance)
+void setDegreesLeftRightByFocalDistance(float focalDistance)
 {
   // Serial.print("setDegreesLeftRightByFocalDistance | focalDistance=");
   // Serial.print(focalDistance);
-  long focalDistancePwr = focalDistance * focalDistance;
+  float focalDistancePwr = focalDistance * focalDistance;
   // Serial.print(", focalDistancePwr=");
   // Serial.print(focalDistancePwr);
   focalDistancePwr = focalDistancePwr + MOTOR_SLIDE_DISTANCE_HALF_PWR;
